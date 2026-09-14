@@ -38,6 +38,15 @@ def _period_for_trigger(trigger: str):
         last_day = calendar.monthrange(year, month)[1]
         start = date(year, month, 16)
         end = date(year, month, last_day)
+    elif trigger == "now":
+        # On-demand: the period the caller is currently in (mirrors tasks_api._current_period).
+        if today.day <= 15:
+            start = today.replace(day=1)
+            end = today.replace(day=15)
+        else:
+            last_day = calendar.monthrange(today.year, today.month)[1]
+            start = today.replace(day=16)
+            end = today.replace(day=last_day)
     else:
         raise ValueError(f"Unknown trigger: {trigger!r}")
     return start, end

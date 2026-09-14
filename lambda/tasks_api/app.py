@@ -9,9 +9,11 @@ from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
+lambda_client = boto3.client("lambda")
 
 TABLE_NAME = os.environ["TABLE_NAME"]
 REPORTS_BUCKET = os.environ["REPORTS_BUCKET"]
+REPORT_FUNCTION_NAME = os.environ["REPORT_FUNCTION_NAME"]
 table = dynamodb.Table(TABLE_NAME)
 
 
@@ -45,8 +47,12 @@ def handler(event, context):
             return create_task(event)
         if method == "GET" and path == "/tasks":
             return list_tasks(event)
+        if method == "PUT" and path.startswith("/tasks/"):
+            return update_task(event)
         if method == "GET" and path == "/reports":
             return list_reports()
+        if method == "POST" and path == "/reports/generate":
+            return generate_report()
         return _response(404, {"message": "Not found"})
     except ValueError as e:
         return _response(400, {"message": str(e)})
@@ -82,6 +88,52 @@ def create_task(event):
     return _response(201, item)
 
 
+def update_task(event):
+    path_params = event.get("pathParameters") or {}
+    old_date = path_params.get("date")
+    task_id = path_params.get("taskId")
+    if not old_date or not task_id:
+        raise ValueError("date and taskId are required in the path")
+
+    body = json.loads(event.get("body") or "{}")
+    new_date = body.get("date")
+    description = (body.get("description") or "").strip()
+
+    if not new_date:
+        raise ValueError("date is required (YYYY-MM-DD)")
+    if not description:
+        raise ValueError("description is required")
+    try:
+        datetime.strptime(new_date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("date must be in YYYY-MM-DD format") from exc
+
+    existing = table.get_item(Key={"pk": "TASK", "sk": f"{old_date}#{task_id}"}).get("Item")
+    if not existing:
+        return _response(404, {"message": "Task not found"})
+
+    updated_at = datetime.utcnow().isoformat() + "Z"
+
+    if new_date == old_date:
+        table.update_item(
+            Key={"pk": "TASK", "sk": f"{old_date}#{task_id}"},
+            UpdateExpression="SET description = :d, updatedAt = :u",
+            ExpressionAttributeValues={":d": description, ":u": updated_at},
+        )
+        existing["description"] = description
+        existing["updatedAt"] = updated_at
+        return _response(200, existing)
+
+    item = dict(existing)
+    item["sk"] = f"{new_date}#{task_id}"
+    item["date"] = new_date
+    item["description"] = description
+    item["updatedAt"] = updated_at
+    table.put_item(Item=item)
+    table.delete_item(Key={"pk": "TASK", "sk": f"{old_date}#{task_id}"})
+    return _response(200, item)
+
+
 def list_tasks(event):
     params = event.get("queryStringParameters") or {}
     start = params.get("start")
@@ -96,6 +148,19 @@ def list_tasks(event):
     )
     items = sorted(resp.get("Items", []), key=lambda i: i["sk"])
     return _response(200, {"start": start, "end": end, "tasks": items})
+
+
+def generate_report():
+    resp = lambda_client.invoke(
+        FunctionName=REPORT_FUNCTION_NAME,
+        InvocationType="RequestResponse",
+        Payload=json.dumps({"trigger": "now"}).encode("utf-8"),
+    )
+    if resp.get("FunctionError"):
+        print("report generator error:", resp["Payload"].read())
+        return _response(502, {"message": "Report generation failed"})
+    payload = json.loads(resp["Payload"].read() or "{}")
+    return _response(200, {"message": payload.get("body", "Report generated")})
 
 
 def list_reports():

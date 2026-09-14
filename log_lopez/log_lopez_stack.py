@@ -100,21 +100,6 @@ class LogLopezStack(Stack):
         # ---------------------------------------------------------------
         # API
         # ---------------------------------------------------------------
-        tasks_fn = _lambda.Function(
-            self,
-            "TasksApiFunction",
-            runtime=_lambda.Runtime.PYTHON_3_12,
-            handler="app.handler",
-            code=_lambda.Code.from_asset("lambda/tasks_api"),
-            timeout=Duration.seconds(10),
-            environment={
-                "TABLE_NAME": table.table_name,
-                "REPORTS_BUCKET": reports_bucket.bucket_name,
-            },
-        )
-        table.grant_read_write_data(tasks_fn)
-        reports_bucket.grant_read(tasks_fn)
-
         report_fn = PythonFunction(
             self,
             "ReportGeneratorFunction",
@@ -131,6 +116,24 @@ class LogLopezStack(Stack):
         table.grant_read_data(report_fn)
         reports_bucket.grant_write(report_fn)
 
+        tasks_fn = _lambda.Function(
+            self,
+            "TasksApiFunction",
+            runtime=_lambda.Runtime.PYTHON_3_12,
+            handler="app.handler",
+            code=_lambda.Code.from_asset("lambda/tasks_api"),
+            # Covers a synchronous invoke of the report generator for on-demand PDFs.
+            timeout=Duration.seconds(35),
+            environment={
+                "TABLE_NAME": table.table_name,
+                "REPORTS_BUCKET": reports_bucket.bucket_name,
+                "REPORT_FUNCTION_NAME": report_fn.function_name,
+            },
+        )
+        table.grant_read_write_data(tasks_fn)
+        reports_bucket.grant_read(tasks_fn)
+        report_fn.grant_invoke(tasks_fn)
+
         http_api = apigwv2.HttpApi(
             self,
             "HttpApi",
@@ -139,6 +142,7 @@ class LogLopezStack(Stack):
                 allow_methods=[
                     apigwv2.CorsHttpMethod.GET,
                     apigwv2.CorsHttpMethod.POST,
+                    apigwv2.CorsHttpMethod.PUT,
                     apigwv2.CorsHttpMethod.OPTIONS,
                 ],
                 allow_headers=["Authorization", "Content-Type"],
@@ -160,8 +164,20 @@ class LogLopezStack(Stack):
             authorizer=authorizer,
         )
         http_api.add_routes(
+            path="/tasks/{date}/{taskId}",
+            methods=[apigwv2.HttpMethod.PUT],
+            integration=tasks_integration,
+            authorizer=authorizer,
+        )
+        http_api.add_routes(
             path="/reports",
             methods=[apigwv2.HttpMethod.GET],
+            integration=tasks_integration,
+            authorizer=authorizer,
+        )
+        http_api.add_routes(
+            path="/reports/generate",
+            methods=[apigwv2.HttpMethod.POST],
             integration=tasks_integration,
             authorizer=authorizer,
         )

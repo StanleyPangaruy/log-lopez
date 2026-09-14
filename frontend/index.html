@@ -179,8 +179,24 @@
   table.ledger td.date{
     font-family:var(--font-mono);color:var(--ink-soft);white-space:nowrap;width:1%;font-size:13px;padding-top:12px;
   }
+  table.ledger td.actions{white-space:nowrap;width:1%;text-align:right;}
   table.ledger tr.new-entry{animation:settle 420ms ease;}
   @keyframes settle{0%{background:var(--stamp-wash);}100%{background:transparent;}}
+  .row-btn{
+    background:none;border:1px solid var(--line);color:var(--ink-soft);
+    font-family:var(--font-body);font-size:12.5px;padding:5px 10px;border-radius:3px;cursor:pointer;
+  }
+  .row-btn:hover{border-color:var(--ink);color:var(--ink);}
+  .row-btn.save{border-color:var(--due);color:var(--due);}
+  .row-btn.save:hover{background:var(--due-wash);}
+  .row-btn + .row-btn{margin-left:6px;}
+  .ledger-edit-date, .ledger-edit-desc{
+    width:100%;border:1px solid var(--focus);border-radius:3px;
+    background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:14px;padding:6px 8px;
+  }
+  .ledger-edit-date{font-family:var(--font-mono);}
+  .ledger-edit-desc{resize:vertical;min-height:48px;}
+  .row-error{color:var(--danger);font-size:12.5px;margin:6px 0 0;}
   .ledger-note{margin:16px 0 0;color:var(--ink-soft);font-size:13px;}
   .empty-note{margin:0;color:var(--ink-soft);font-size:13.5px;}
 
@@ -205,6 +221,15 @@
     padding:7px 13px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;
   }
   .dl-btn:hover{background:var(--ink);color:var(--paper-raised);}
+
+  .reports-head{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-start;justify-content:space-between;}
+  .generate-btn{
+    background:none;border:1px solid var(--ink);color:var(--ink);
+    font-family:var(--font-body);font-size:13px;font-weight:500;
+    padding:8px 14px;border-radius:3px;cursor:pointer;white-space:nowrap;
+  }
+  .generate-btn:hover{background:var(--ink);color:var(--paper-raised);}
+  .generate-btn:disabled{opacity:0.6;cursor:default;background:none;color:var(--ink);}
 
   footer{color:var(--ink-soft);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;}
 </style>
@@ -274,7 +299,7 @@
         <span class="progress-pill" id="progressPill">&nbsp;</span>
       </div>
       <table class="ledger">
-        <thead><tr><th>Date</th><th>Description</th></tr></thead>
+        <thead><tr><th>Date</th><th>Description</th><th></th></tr></thead>
         <tbody id="ledgerBody"></tbody>
       </table>
       <p class="empty-note" id="emptyNote" hidden>Nothing logged yet this period — add today's entry on the left.</p>
@@ -283,8 +308,14 @@
   </div>
 
   <section class="reports">
-    <h2>Past reports</h2>
-    <p class="sub">Generated automatically on the 1st and 16th of each month.</p>
+    <div class="reports-head">
+      <div>
+        <h2>Past reports</h2>
+        <p class="sub">Generated automatically on the 1st and 16th of each month.</p>
+      </div>
+      <button type="button" class="generate-btn" id="generateReportBtn">Generate PDF for this period</button>
+    </div>
+    <p class="error-note" id="generateError" hidden></p>
     <div id="reportsList"></div>
     <p class="empty-note" id="reportsEmpty" hidden>No reports generated yet.</p>
   </section>
@@ -445,6 +476,8 @@
       "This period, " + monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate();
     document.getElementById("ledgerTitle").textContent =
       monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate() + " ledger";
+    document.getElementById("generateReportBtn").textContent =
+      "Generate PDF · " + monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate();
   }
 
   function renderStrip(tasksByDate){
@@ -472,11 +505,19 @@
     return days.length;
   }
 
+  var currentTasks = [];
+  var editingTaskId = null;
+
   function renderLedger(tasks, highlightIso){
     var body = document.getElementById("ledgerBody");
     body.innerHTML = "";
     tasks.forEach(function(t){
+      if (t.taskId === editingTaskId){
+        body.appendChild(buildEditRow(t));
+        return;
+      }
       var tr = document.createElement("tr");
+      tr.dataset.taskId = t.taskId;
       if (t.date === highlightIso) tr.classList.add("new-entry");
       var tdDate = document.createElement("td");
       tdDate.className = "date";
@@ -484,21 +525,97 @@
       tdDate.textContent = monthShort(d) + " " + d.getDate();
       var tdDesc = document.createElement("td");
       tdDesc.textContent = t.description;
-      tr.appendChild(tdDate); tr.appendChild(tdDesc);
+      var tdActions = document.createElement("td");
+      tdActions.className = "actions";
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-btn edit";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", function(){
+        editingTaskId = t.taskId;
+        renderLedger(currentTasks, highlightIso);
+      });
+      tdActions.appendChild(editBtn);
+      tr.appendChild(tdDate); tr.appendChild(tdDesc); tr.appendChild(tdActions);
       body.appendChild(tr);
     });
     document.getElementById("emptyNote").hidden = tasks.length > 0;
   }
 
+  function buildEditRow(t){
+    var tr = document.createElement("tr");
+    tr.dataset.taskId = t.taskId;
+
+    var tdDate = document.createElement("td");
+    var dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.className = "ledger-edit-date";
+    dateInput.value = t.date;
+    tdDate.appendChild(dateInput);
+
+    var tdDesc = document.createElement("td");
+    var descInput = document.createElement("textarea");
+    descInput.className = "ledger-edit-desc";
+    descInput.value = t.description;
+    tdDesc.appendChild(descInput);
+
+    var tdActions = document.createElement("td");
+    tdActions.className = "actions";
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "row-btn save";
+    saveBtn.textContent = "Save";
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "row-btn cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", function(){
+      editingTaskId = null;
+      renderLedger(currentTasks, null);
+    });
+    saveBtn.addEventListener("click", function(){
+      var newDate = dateInput.value;
+      var newDesc = descInput.value.trim();
+      var errorEl = tr.querySelector(".row-error");
+      if (errorEl) errorEl.remove();
+      if (!newDate || !newDesc) return;
+
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      api("/tasks/" + encodeURIComponent(t.date) + "/" + encodeURIComponent(t.taskId), {
+        method: "PUT",
+        body: JSON.stringify({ date: newDate, description: newDesc })
+      }).then(function(){
+        editingTaskId = null;
+        return loadTasks(newDate);
+      }).catch(function(err){
+        var note = document.createElement("p");
+        note.className = "row-error";
+        note.textContent = err.message;
+        tdDesc.appendChild(note);
+      }).finally(function(){
+        saveBtn.disabled = false;
+        cancelBtn.disabled = false;
+      });
+    });
+    tdActions.appendChild(saveBtn);
+    tdActions.appendChild(cancelBtn);
+
+    tr.appendChild(tdDate); tr.appendChild(tdDesc); tr.appendChild(tdActions);
+    return tr;
+  }
+
   function loadTasks(highlightIso){
     return api("/tasks").then(function(data){
       var tasks = data.tasks || [];
+      currentTasks = tasks;
       var tasksByDate = {};
       tasks.forEach(function(t){ tasksByDate[t.date] = true; });
       renderLedger(tasks, highlightIso);
       var totalWeekdays = renderStrip(tasksByDate);
+      var daysLogged = Object.keys(tasksByDate).length;
       document.getElementById("progressPill").textContent =
-        tasks.length + " of " + totalWeekdays + " weekdays logged";
+        daysLogged + " of " + totalWeekdays + " weekdays logged";
       var eta = reportEta(period);
       document.getElementById("ledgerNote").textContent = eta.days <= 0
         ? "This table becomes the Accomplishment Report table today."
@@ -609,6 +726,28 @@
     }).finally(function(){
       btn.disabled = false;
     });
+  });
+
+  document.getElementById("generateReportBtn").addEventListener("click", function(){
+    var btn = this;
+    var errorEl = document.getElementById("generateError");
+    errorEl.hidden = true;
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Generating…";
+
+    api("/reports/generate", { method: "POST", body: JSON.stringify({}) })
+      .then(function(){
+        return loadReports();
+      })
+      .catch(function(err){
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      })
+      .finally(function(){
+        btn.disabled = false;
+        btn.textContent = original;
+      });
   });
 
   // ---------------- Boot ----------------
