@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log Lopez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1F2EC;
+    --paper-raised:#FFFFFF;
+    --line:#CBD1C3;
+    --ink:#182A4E;
+    --ink-soft:#57628A;
+    --stamp:#B08526;
+    --stamp-ink:#8A6519;
+    --stamp-wash:rgba(176,133,38,0.12);
+    --due:#2E6B4F;
+    --due-wash:rgba(46,107,79,0.12);
+    --focus:#3B5BA9;
+    --danger:#A8342F;
+    --danger-wash:rgba(168,52,47,0.10);
+    --font-display:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --font-body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0F1B2E;
+      --paper-raised:#152443;
+      --line:#2C3E63;
+      --ink:#E8EAF2;
+      --ink-soft:#98A4C6;
+      --stamp:#DBAC42;
+      --stamp-ink:#EFC46B;
+      --stamp-wash:rgba(219,172,66,0.16);
+      --due:#4FA179;
+      --due-wash:rgba(79,161,121,0.16);
+      --focus:#82ACEE;
+      --danger:#E2685F;
+      --danger-wash:rgba(226,104,95,0.14);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0F1B2E;
+    --paper-raised:#152443;
+    --line:#2C3E63;
+    --ink:#E8EAF2;
+    --ink-soft:#98A4C6;
+    --stamp:#DBAC42;
+    --stamp-ink:#EFC46B;
+    --stamp-wash:rgba(219,172,66,0.16);
+    --due:#4FA179;
+    --due-wash:rgba(79,161,121,0.16);
+    --focus:#82ACEE;
+    --danger:#E2685F;
+    --danger-wash:rgba(226,104,95,0.14);
+  }
+
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--font-body);font-size:15.5px;line-height:1.5;
+    padding:32px 20px 64px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+  a{color:inherit;}
+  button{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+  [hidden]{display:none !important;}
+
+  .page{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:36px;}
+
+  /* ---- Login ---- */
+  .login-wrap{max-width:380px;margin:12vh auto 0;display:flex;flex-direction:column;gap:22px;}
+  .login-wrap h1{
+    margin:0;font-family:var(--font-display);font-weight:700;font-size:24px;
+    padding-bottom:6px;border-bottom:3px solid var(--stamp);display:inline-block;
+  }
+  .login-wrap .sub{margin:0;color:var(--ink-soft);font-size:13px;}
+  .error-note{
+    font-size:13px;color:var(--danger);background:var(--danger-wash);
+    border:1px solid var(--danger);border-radius:3px;padding:9px 11px;
+  }
+
+  /* ---- Topbar ---- */
+  .topbar{
+    display:flex;flex-wrap:wrap;gap:14px 24px;
+    align-items:flex-end;justify-content:space-between;
+    border-bottom:2px solid var(--ink);padding-bottom:16px;
+  }
+  .brand-text h1{
+    margin:0;font-family:var(--font-display);font-weight:700;
+    font-size:22px;letter-spacing:0.01em;text-wrap:balance;
+    padding-bottom:6px;border-bottom:3px solid var(--stamp);display:inline-block;
+  }
+  .brand-text p{margin:6px 0 0;color:var(--ink-soft);font-size:13px;}
+  .topbar-right{display:flex;align-items:center;gap:14px;}
+  .period-chip{
+    font-family:var(--font-mono);font-size:13px;color:var(--stamp);
+    border:1px solid var(--stamp);background:var(--stamp-wash);
+    padding:7px 12px;border-radius:3px;white-space:nowrap;
+  }
+  .period-chip b{font-weight:600;}
+  .logout-btn{
+    background:none;border:1px solid var(--line);color:var(--ink-soft);
+    font-size:13px;padding:7px 12px;border-radius:3px;cursor:pointer;
+  }
+  .logout-btn:hover{border-color:var(--ink);color:var(--ink);}
+
+  /* ---- Layout grid ---- */
+  .workspace{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:28px;align-items:start;}
+  @media (max-width:760px){.workspace{grid-template-columns:1fr;}}
+
+  .panel{background:var(--paper-raised);border:1px solid var(--line);border-radius:4px;padding:22px;}
+  .panel h2{margin:0 0 4px;font-family:var(--font-display);font-size:17px;font-weight:600;}
+  .panel .sub{margin:0 0 18px;color:var(--ink-soft);font-size:13px;}
+
+  /* ---- Form ---- */
+  form{display:flex;flex-direction:column;gap:14px;}
+  .field label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:5px;}
+  .field input,.field textarea{
+    width:100%;border:1px solid var(--line);border-radius:3px;
+    background:var(--paper);color:var(--ink);
+    font-family:var(--font-body);font-size:14.5px;padding:9px 10px;
+  }
+  .field input[type="date"]{font-family:var(--font-mono);}
+  .field textarea{resize:vertical;min-height:64px;line-height:1.45;}
+  .field input:focus,.field textarea:focus{border-color:var(--focus);}
+
+  .stamp-btn{
+    align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
+    background:var(--stamp);color:#FBF6EA;border:none;
+    font-family:var(--font-display);font-weight:600;font-size:14px;
+    padding:10px 18px;border-radius:3px;cursor:pointer;
+    transition:transform 120ms ease, background 120ms ease;
+  }
+  .stamp-btn:hover{background:var(--stamp-ink);}
+  .stamp-btn:active{transform:scale(0.94) rotate(-1deg);}
+  .stamp-btn:disabled{opacity:0.6;cursor:default;}
+  .stamp-btn.stamping{animation:stampdown 260ms ease;}
+  @keyframes stampdown{
+    0%{transform:scale(1) rotate(0deg);}
+    35%{transform:scale(0.88) rotate(-2deg);}
+    100%{transform:scale(1) rotate(0deg);}
+  }
+
+  /* ---- Weekday strip ---- */
+  .strip-label{font-size:12.5px;color:var(--ink-soft);margin:22px 0 10px;}
+  .strip{display:flex;flex-wrap:wrap;gap:4px 6px;}
+  .strip .week-gap{width:10px;flex:none;}
+  .day-cell{
+    width:30px;height:38px;border-radius:3px;flex:none;
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);position:relative;
+  }
+  .day-cell.logged{background:var(--stamp-wash);border-color:var(--stamp);color:var(--stamp);font-weight:600;}
+  .day-cell.today{box-shadow:0 0 0 2px var(--due) inset;}
+  .day-cell.future{border-style:dashed;}
+
+  /* ---- Ledger table ---- */
+  .ledger-head{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline;justify-content:space-between;margin-bottom:14px;}
+  .progress-pill{
+    font-family:var(--font-mono);font-size:12.5px;color:var(--due);
+    background:var(--due-wash);border:1px solid var(--due);padding:5px 10px;border-radius:3px;white-space:nowrap;
+  }
+  table.ledger{width:100%;border-collapse:collapse;}
+  table.ledger th{
+    text-align:left;font-size:12px;color:var(--ink-soft);font-weight:500;
+    border-bottom:1px solid var(--ink);padding:0 10px 8px 0;
+  }
+  table.ledger td{padding:11px 10px 11px 0;border-bottom:1px solid var(--line);vertical-align:top;font-size:14.5px;}
+  table.ledger tr:last-child td{border-bottom:none;}
+  table.ledger td.date{
+    font-family:var(--font-mono);color:var(--ink-soft);white-space:nowrap;width:1%;font-size:13px;padding-top:12px;
+  }
+  table.ledger tr.new-entry{animation:settle 420ms ease;}
+  @keyframes settle{0%{background:var(--stamp-wash);}100%{background:transparent;}}
+  .ledger-note{margin:16px 0 0;color:var(--ink-soft);font-size:13px;}
+  .empty-note{margin:0;color:var(--ink-soft);font-size:13.5px;}
+
+  /* ---- Reports ---- */
+  .reports h2{margin:0 0 4px;font-family:var(--font-display);font-size:19px;font-weight:600;}
+  .reports .sub{margin:0 0 18px;color:var(--ink-soft);font-size:13px;}
+  .report-row{
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;
+    padding:14px 0;border-bottom:1px solid var(--line);
+  }
+  .report-row:first-of-type{border-top:1px solid var(--line);}
+  .report-main{display:flex;align-items:center;gap:12px;}
+  .report-stamp{
+    font-family:var(--font-mono);font-size:11px;color:var(--stamp);
+    border:1px solid var(--stamp);border-radius:3px;padding:3px 7px;transform:rotate(-3deg);white-space:nowrap;
+  }
+  .report-name{font-size:14.5px;}
+  .report-date{color:var(--ink-soft);font-size:13px;font-family:var(--font-mono);}
+  .dl-btn{
+    background:none;border:1px solid var(--ink);color:var(--ink);
+    font-family:var(--font-body);font-size:13px;font-weight:500;
+    padding:7px 13px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;
+  }
+  .dl-btn:hover{background:var(--ink);color:var(--paper-raised);}
+
+  footer{color:var(--ink-soft);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginView">
+  <div>
+    <h1>Log Lopez</h1>
+    <p class="sub">Daily accomplishment log · Municipality of Lopez, Quezon</p>
+  </div>
+  <form id="loginForm">
+    <div class="field">
+      <label for="loginUser">Username or email</label>
+      <input type="text" id="loginUser" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="loginPass">Password</label>
+      <input type="password" id="loginPass" autocomplete="current-password" required>
+    </div>
+    <div class="field" id="newPassField" hidden>
+      <label for="loginNewPass">New password</label>
+      <input type="password" id="loginNewPass" autocomplete="new-password">
+    </div>
+    <p class="error-note" id="loginError" hidden></p>
+    <button type="submit" class="stamp-btn" id="loginBtn">Sign in</button>
+  </form>
+</div>
+
+<div class="page" id="appView" hidden>
+
+  <div class="topbar">
+    <div class="brand-text">
+      <h1>Log Lopez</h1>
+      <p>Daily accomplishment log · Municipality of Lopez, Quezon</p>
+    </div>
+    <div class="topbar-right">
+      <div class="period-chip" id="periodChip">Loading period&hellip;</div>
+      <button class="logout-btn" id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <section class="panel">
+      <h2>What did you do today?</h2>
+      <p class="sub">One line is enough — it gets tidied up for the report later.</p>
+      <form id="logForm">
+        <div class="field">
+          <label for="entryDate">Date</label>
+          <input type="date" id="entryDate" required>
+        </div>
+        <div class="field">
+          <label for="entryDesc">Description</label>
+          <textarea id="entryDesc" placeholder="e.g. Reimaged two workstations at the Assessor's Office." required></textarea>
+        </div>
+        <p class="error-note" id="formError" hidden></p>
+        <button type="submit" class="stamp-btn" id="addBtn">Add to log</button>
+      </form>
+
+      <p class="strip-label" id="stripLabel">This period</p>
+      <div class="strip" id="weekStrip"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ledger-head">
+        <h2 style="margin:0;" id="ledgerTitle">This period's ledger</h2>
+        <span class="progress-pill" id="progressPill">&nbsp;</span>
+      </div>
+      <table class="ledger">
+        <thead><tr><th>Date</th><th>Description</th></tr></thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+      <p class="empty-note" id="emptyNote" hidden>Nothing logged yet this period — add today's entry on the left.</p>
+      <p class="ledger-note" id="ledgerNote"></p>
+    </section>
+  </div>
+
+  <section class="reports">
+    <h2>Past reports</h2>
+    <p class="sub">Generated automatically on the 1st and 16th of each month.</p>
+    <div id="reportsList"></div>
+    <p class="empty-note" id="reportsEmpty" hidden>No reports generated yet.</p>
+  </section>
+
+  <footer>Log Lopez — a personal accomplishment log, built to match the Municipality of Lopez report format.</footer>
+
+</div>
+
+<script src="config.js"></script>
+<script>
+(function(){
+  "use strict";
+  var cfg = window.LOG_LOPEZ_CONFIG || {};
+  var COGNITO_ENDPOINT = "https://cognito-idp." + cfg.region + ".amazonaws.com/";
+  var STORAGE_KEY = "logLopezSession";
+
+  // ---------------- Auth ----------------
+
+  function saveSession(auth){
+    var expiresAt = Date.now() + (auth.ExpiresIn * 1000);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      idToken: auth.IdToken,
+      refreshToken: auth.RefreshToken,
+      expiresAt: expiresAt
+    }));
+  }
+
+  function getSession(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      var s = JSON.parse(raw);
+      if (!s.idToken || Date.now() >= s.expiresAt) return null;
+      return s;
+    }catch(e){ return null; }
+  }
+
+  function clearSession(){
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function cognitoRequest(target, body){
+    return fetch(COGNITO_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-amz-json-1.1",
+        "X-Amz-Target": "AWSCognitoIdentityProviderService." + target
+      },
+      body: JSON.stringify(body)
+    }).then(function(res){
+      return res.json().then(function(data){
+        if (!res.ok) throw new Error(data.message || data.__type || "Sign-in failed");
+        return data;
+      });
+    });
+  }
+
+  var pendingChallenge = null;
+
+  function login(username, password){
+    return cognitoRequest("InitiateAuth", {
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: cfg.userPoolClientId,
+      AuthParameters: { USERNAME: username, PASSWORD: password }
+    }).then(function(data){
+      if (data.ChallengeName === "NEW_PASSWORD_REQUIRED"){
+        pendingChallenge = { session: data.Session, username: username };
+        document.getElementById("newPassField").hidden = false;
+        throw new Error("This account needs a new password — enter one above and sign in again.");
+      }
+      saveSession(data.AuthenticationResult);
+    });
+  }
+
+  function respondToNewPassword(newPassword){
+    return cognitoRequest("RespondToAuthChallenge", {
+      ChallengeName: "NEW_PASSWORD_REQUIRED",
+      ClientId: cfg.userPoolClientId,
+      Session: pendingChallenge.session,
+      ChallengeResponses: {
+        USERNAME: pendingChallenge.username,
+        NEW_PASSWORD: newPassword
+      }
+    }).then(function(data){
+      pendingChallenge = null;
+      saveSession(data.AuthenticationResult);
+    });
+  }
+
+  // ---------------- API ----------------
+
+  function api(path, options){
+    options = options || {};
+    var session = getSession();
+    var headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
+    if (session) headers.Authorization = "Bearer " + session.idToken;
+    return fetch(cfg.apiUrl + path, Object.assign({}, options, { headers: headers }))
+      .then(function(res){
+        if (res.status === 401){ clearSession(); showLogin(); throw new Error("Session expired"); }
+        return res.json().then(function(data){
+          if (!res.ok) throw new Error(data.message || "Request failed");
+          return data;
+        });
+      });
+  }
+
+  // ---------------- Period / date helpers ----------------
+
+  function pad(n){ return n < 10 ? "0" + n : "" + n; }
+  function isoDate(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+  function monthName(d){ return d.toLocaleString("en-US", { month: "long" }); }
+  function monthShort(d){ return d.toLocaleString("en-US", { month: "short" }); }
+
+  function currentPeriod(){
+    var today = new Date();
+    var y = today.getFullYear(), m = today.getMonth();
+    if (today.getDate() <= 15){
+      return { start: new Date(y, m, 1), end: new Date(y, m, 15), today: today };
+    }
+    var lastDay = new Date(y, m + 1, 0).getDate();
+    return { start: new Date(y, m, 16), end: new Date(y, m, lastDay), today: today };
+  }
+
+  function weekdaysInRange(start, end){
+    var days = [];
+    var cur = new Date(start);
+    var lastWeek = null;
+    while (cur <= end){
+      var dow = cur.getDay(); // 0 Sun .. 6 Sat
+      if (dow !== 0 && dow !== 6){
+        var weekNum = Math.floor((cur - start) / (7*24*3600*1000));
+        days.push({ date: new Date(cur), week: weekNum });
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return days;
+  }
+
+  function reportEta(period){
+    var end = period.end;
+    var nextTrigger = new Date(end);
+    nextTrigger.setDate(nextTrigger.getDate() + 1);
+    var msPerDay = 24*3600*1000;
+    var days = Math.ceil((nextTrigger - new Date(period.today.getFullYear(), period.today.getMonth(), period.today.getDate())) / msPerDay);
+    return { date: nextTrigger, days: days };
+  }
+
+  // ---------------- Rendering ----------------
+
+  var period = null;
+
+  function renderPeriodChip(){
+    var eta = reportEta(period);
+    var label = eta.days <= 0 ? "generating today" : ("in " + eta.days + " day" + (eta.days === 1 ? "" : "s"));
+    document.getElementById("periodChip").innerHTML =
+      "Report " + label + " · " + monthShort(eta.date) + " " + eta.date.getDate();
+    document.getElementById("stripLabel").textContent =
+      "This period, " + monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate();
+    document.getElementById("ledgerTitle").textContent =
+      monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate() + " ledger";
+  }
+
+  function renderStrip(tasksByDate){
+    var strip = document.getElementById("weekStrip");
+    strip.innerHTML = "";
+    var days = weekdaysInRange(period.start, period.end);
+    var lastWeek = null;
+    var todayIso = isoDate(period.today);
+    days.forEach(function(day){
+      if (lastWeek !== null && day.week !== lastWeek){
+        var gap = document.createElement("div");
+        gap.className = "week-gap";
+        strip.appendChild(gap);
+      }
+      lastWeek = day.week;
+      var iso = isoDate(day.date);
+      var logged = !!tasksByDate[iso];
+      var cell = document.createElement("div");
+      cell.className = "day-cell" + (logged ? " logged" : " future");
+      if (iso === todayIso) cell.classList.add("today");
+      cell.textContent = day.date.getDate();
+      cell.title = monthShort(day.date) + " " + day.date.getDate() + (logged ? " — logged" : " — not logged yet");
+      strip.appendChild(cell);
+    });
+    return days.length;
+  }
+
+  function renderLedger(tasks, highlightIso){
+    var body = document.getElementById("ledgerBody");
+    body.innerHTML = "";
+    tasks.forEach(function(t){
+      var tr = document.createElement("tr");
+      if (t.date === highlightIso) tr.classList.add("new-entry");
+      var tdDate = document.createElement("td");
+      tdDate.className = "date";
+      var d = new Date(t.date + "T00:00:00");
+      tdDate.textContent = monthShort(d) + " " + d.getDate();
+      var tdDesc = document.createElement("td");
+      tdDesc.textContent = t.description;
+      tr.appendChild(tdDate); tr.appendChild(tdDesc);
+      body.appendChild(tr);
+    });
+    document.getElementById("emptyNote").hidden = tasks.length > 0;
+  }
+
+  function loadTasks(highlightIso){
+    return api("/tasks").then(function(data){
+      var tasks = data.tasks || [];
+      var tasksByDate = {};
+      tasks.forEach(function(t){ tasksByDate[t.date] = true; });
+      renderLedger(tasks, highlightIso);
+      var totalWeekdays = renderStrip(tasksByDate);
+      document.getElementById("progressPill").textContent =
+        tasks.length + " of " + totalWeekdays + " weekdays logged";
+      var eta = reportEta(period);
+      document.getElementById("ledgerNote").textContent = eta.days <= 0
+        ? "This table becomes the Accomplishment Report table today."
+        : "This table becomes the Accomplishment Report table on " + monthName(eta.date) + " " + eta.date.getDate() + ".";
+    });
+  }
+
+  function loadReports(){
+    return api("/reports").then(function(data){
+      var list = document.getElementById("reportsList");
+      list.innerHTML = "";
+      var reports = data.reports || [];
+      document.getElementById("reportsEmpty").hidden = reports.length > 0;
+      reports.forEach(function(r){
+        var row = document.createElement("div");
+        row.className = "report-row";
+        var filed = new Date(r.lastModified);
+        row.innerHTML =
+          '<div class="report-main">' +
+            '<span class="report-stamp">Generated</span>' +
+            '<div><div class="report-name">' + r.key.replace(".pdf","").replace(/_to_/," – ") + '</div>' +
+            '<div class="report-date">Filed ' + filed.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"}) + '</div></div>' +
+          '</div>' +
+          '<a class="dl-btn" href="' + r.downloadUrl + '" target="_blank" rel="noopener">Download PDF</a>';
+        list.appendChild(row);
+      });
+    });
+  }
+
+  // ---------------- View switching ----------------
+
+  function showLogin(){
+    document.getElementById("loginView").hidden = false;
+    document.getElementById("appView").hidden = true;
+  }
+
+  function showApp(){
+    document.getElementById("loginView").hidden = true;
+    document.getElementById("appView").hidden = false;
+    period = currentPeriod();
+    document.getElementById("entryDate").value = isoDate(period.today);
+    document.getElementById("entryDate").min = isoDate(period.start);
+    document.getElementById("entryDate").max = isoDate(period.end);
+    renderPeriodChip();
+    loadTasks(null);
+    loadReports();
+  }
+
+  // ---------------- Wiring ----------------
+
+  document.getElementById("loginForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var errorEl = document.getElementById("loginError");
+    errorEl.hidden = true;
+    var btn = document.getElementById("loginBtn");
+    btn.disabled = true;
+
+    var username = document.getElementById("loginUser").value.trim();
+    var password = document.getElementById("loginPass").value;
+    var newPassEl = document.getElementById("loginNewPass");
+
+    var action;
+    if (pendingChallenge){
+      action = respondToNewPassword(newPassEl.value);
+    } else {
+      action = login(username, password);
+    }
+
+    action.then(function(){
+      showApp();
+    }).catch(function(err){
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }).finally(function(){
+      btn.disabled = false;
+    });
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", function(){
+    clearSession();
+    showLogin();
+  });
+
+  document.getElementById("logForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var dateInput = document.getElementById("entryDate");
+    var descInput = document.getElementById("entryDesc");
+    var errorEl = document.getElementById("formError");
+    errorEl.hidden = true;
+    var desc = descInput.value.trim();
+    if (!desc) return;
+
+    var btn = document.getElementById("addBtn");
+    btn.disabled = true;
+
+    api("/tasks", {
+      method: "POST",
+      body: JSON.stringify({ date: dateInput.value, description: desc })
+    }).then(function(){
+      btn.classList.remove("stamping");
+      void btn.offsetWidth;
+      btn.classList.add("stamping");
+      descInput.value = "";
+      return loadTasks(dateInput.value);
+    }).catch(function(err){
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }).finally(function(){
+      btn.disabled = false;
+    });
+  });
+
+  // ---------------- Boot ----------------
+
+  if (getSession()){
+    showApp();
+  } else {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>
