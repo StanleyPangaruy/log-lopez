@@ -65,6 +65,7 @@
     margin:0;background:var(--paper);color:var(--ink);
     font-family:var(--font-body);font-size:15.5px;line-height:1.5;
     padding:32px 20px 64px;
+    overflow-x:hidden;
   }
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
@@ -105,7 +106,7 @@
     padding-bottom:6px;border-bottom:3px solid var(--stamp);display:inline-block;
   }
   .brand-text p{margin:6px 0 0;color:var(--ink-soft);font-size:13px;}
-  .topbar-right{display:flex;align-items:center;gap:14px;}
+  .topbar-right{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;}
   .period-chip{
     font-family:var(--font-mono);font-size:13px;color:var(--stamp);
     border:1px solid var(--stamp);background:var(--stamp-wash);
@@ -113,6 +114,7 @@
   }
   .period-chip b{font-weight:600;}
   .profile-chip{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
+  .profile-edit-actions{display:flex;gap:10px;align-items:center;}
   .logout-btn{
     background:none;border:1px solid var(--line);color:var(--ink-soft);
     font-size:13px;padding:7px 12px;border-radius:3px;cursor:pointer;
@@ -175,7 +177,8 @@
     font-family:var(--font-mono);font-size:12.5px;color:var(--due);
     background:var(--due-wash);border:1px solid var(--due);padding:5px 10px;border-radius:3px;white-space:nowrap;
   }
-  table.ledger{width:100%;border-collapse:collapse;}
+  .ledger-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  table.ledger{width:100%;min-width:420px;border-collapse:collapse;}
   table.ledger th{
     text-align:left;font-size:12px;color:var(--ink-soft);font-weight:500;
     border-bottom:1px solid var(--ink);padding:0 10px 8px 0;
@@ -195,6 +198,8 @@
   .row-btn:hover{border-color:var(--ink);color:var(--ink);}
   .row-btn.save{border-color:var(--due);color:var(--due);}
   .row-btn.save:hover{background:var(--due-wash);}
+  .row-btn.danger{border-color:var(--danger);color:var(--danger);}
+  .row-btn.danger:hover{background:var(--danger-wash);}
   .row-btn + .row-btn{margin-left:6px;}
   .ledger-edit-date, .ledger-edit-desc{
     width:100%;border:1px solid var(--focus);border-radius:3px;
@@ -215,6 +220,8 @@
   }
   .report-row:first-of-type{border-top:1px solid var(--line);}
   .report-main{display:flex;align-items:center;gap:12px;}
+  .report-actions{display:flex;align-items:center;gap:8px;}
+  .report-confirm{font-size:13px;color:var(--danger);}
   .report-stamp{
     font-family:var(--font-mono);font-size:11px;color:var(--stamp);
     border:1px solid var(--stamp);border-radius:3px;padding:3px 7px;transform:rotate(-3deg);white-space:nowrap;
@@ -238,6 +245,24 @@
   .generate-btn:disabled{opacity:0.6;cursor:default;background:none;color:var(--ink);}
 
   footer{color:var(--ink-soft);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;}
+
+  /* ---- Mobile ---- */
+  @media (max-width:600px){
+    body{padding:20px 16px 48px;}
+    .page{gap:24px;}
+    .login-wrap{margin-top:8vh;}
+    .topbar{padding-bottom:12px;gap:10px 16px;}
+    .brand-text h1{font-size:19px;}
+    .brand-text p{font-size:12px;}
+    .panel{padding:16px;}
+    .stamp-btn{align-self:stretch;width:100%;justify-content:center;}
+    .generate-btn{width:100%;justify-content:center;text-align:center;}
+    .profile-edit-actions{flex-direction:column;align-items:stretch;}
+    .day-cell{width:26px;height:34px;font-size:11px;}
+    table.ledger{min-width:0;}
+    table.ledger td, table.ledger th{padding-right:6px;}
+    .row-btn{padding:6px 9px;}
+  }
 </style>
 </head>
 <body>
@@ -323,10 +348,31 @@
     </div>
     <div class="topbar-right">
       <span class="profile-chip" id="profileChip"></span>
+      <button type="button" class="link-btn" id="editProfileBtn">Edit</button>
       <div class="period-chip" id="periodChip">Loading period&hellip;</div>
       <button class="logout-btn" id="logoutBtn">Sign out</button>
     </div>
   </div>
+
+  <section class="panel" id="profileEditPanel" hidden>
+    <h2>Edit profile</h2>
+    <p class="sub">This name and designation appear as "Prepared by" on your reports.</p>
+    <form id="profileEditForm">
+      <div class="field">
+        <label for="profileEditName">Full name</label>
+        <input type="text" id="profileEditName" required>
+      </div>
+      <div class="field">
+        <label for="profileEditDesignation">Designation / Position</label>
+        <input type="text" id="profileEditDesignation" required>
+      </div>
+      <p class="error-note" id="profileEditError" hidden></p>
+      <div class="profile-edit-actions">
+        <button type="submit" class="stamp-btn" id="profileSaveBtn">Save changes</button>
+        <button type="button" class="generate-btn" id="profileCancelBtn">Cancel</button>
+      </div>
+    </form>
+  </section>
 
   <div class="workspace">
     <section class="panel">
@@ -354,10 +400,12 @@
         <h2 style="margin:0;" id="ledgerTitle">This period's ledger</h2>
         <span class="progress-pill" id="progressPill">&nbsp;</span>
       </div>
-      <table class="ledger">
-        <thead><tr><th>Date</th><th>Description</th><th></th></tr></thead>
-        <tbody id="ledgerBody"></tbody>
-      </table>
+      <div class="ledger-scroll">
+        <table class="ledger">
+          <thead><tr><th>Date</th><th>Description</th><th></th></tr></thead>
+          <tbody id="ledgerBody"></tbody>
+        </table>
+      </div>
       <p class="empty-note" id="emptyNote" hidden>Nothing logged yet this period — add today's entry on the left.</p>
       <p class="ledger-note" id="ledgerNote"></p>
     </section>
@@ -372,6 +420,7 @@
       <button type="button" class="generate-btn" id="generateReportBtn">Generate PDF for this period</button>
     </div>
     <p class="error-note" id="generateError" hidden></p>
+    <p class="error-note" id="reportsError" hidden></p>
     <div id="reportsList"></div>
     <p class="empty-note" id="reportsEmpty" hidden>No reports generated yet.</p>
   </section>
@@ -679,6 +728,8 @@
     });
   }
 
+  var confirmDeleteKey = null;
+
   function loadReports(){
     return api("/reports").then(function(data){
       var list = document.getElementById("reportsList");
@@ -689,13 +740,73 @@
         var row = document.createElement("div");
         row.className = "report-row";
         var filed = new Date(r.lastModified);
-        row.innerHTML =
-          '<div class="report-main">' +
-            '<span class="report-stamp">Generated</span>' +
-            '<div><div class="report-name">' + r.key.replace(".pdf","").replace(/_to_/," – ") + '</div>' +
-            '<div class="report-date">Filed ' + filed.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"}) + '</div></div>' +
-          '</div>' +
-          '<a class="dl-btn" href="' + r.downloadUrl + '" target="_blank" rel="noopener">Download PDF</a>';
+
+        var main = document.createElement("div");
+        main.className = "report-main";
+        main.innerHTML =
+          '<span class="report-stamp">Generated</span>' +
+          '<div><div class="report-name">' + r.key.replace(".pdf","").replace(/_to_/," – ") + '</div>' +
+          '<div class="report-date">Filed ' + filed.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"}) + '</div></div>';
+        row.appendChild(main);
+
+        var actions = document.createElement("div");
+        actions.className = "report-actions";
+
+        if (confirmDeleteKey === r.key){
+          var confirmText = document.createElement("span");
+          confirmText.className = "report-confirm";
+          confirmText.textContent = "Delete this report?";
+          var yesBtn = document.createElement("button");
+          yesBtn.type = "button";
+          yesBtn.className = "row-btn danger";
+          yesBtn.textContent = "Yes, delete";
+          yesBtn.addEventListener("click", function(){
+            yesBtn.disabled = true;
+            api("/reports/" + encodeURIComponent(r.key), { method: "DELETE" })
+              .then(function(){
+                confirmDeleteKey = null;
+                return loadReports();
+              })
+              .catch(function(err){
+                confirmDeleteKey = null;
+                var errorEl = document.getElementById("reportsError");
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+                loadReports();
+              });
+          });
+          var noBtn = document.createElement("button");
+          noBtn.type = "button";
+          noBtn.className = "row-btn";
+          noBtn.textContent = "Cancel";
+          noBtn.addEventListener("click", function(){
+            confirmDeleteKey = null;
+            loadReports();
+          });
+          actions.appendChild(confirmText);
+          actions.appendChild(yesBtn);
+          actions.appendChild(noBtn);
+        } else {
+          var dl = document.createElement("a");
+          dl.className = "dl-btn";
+          dl.href = r.downloadUrl;
+          dl.target = "_blank";
+          dl.rel = "noopener";
+          dl.textContent = "Download PDF";
+          var delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "row-btn danger";
+          delBtn.textContent = "Delete";
+          delBtn.addEventListener("click", function(){
+            document.getElementById("reportsError").hidden = true;
+            confirmDeleteKey = r.key;
+            loadReports();
+          });
+          actions.appendChild(dl);
+          actions.appendChild(delBtn);
+        }
+
+        row.appendChild(actions);
         list.appendChild(row);
       });
     });
@@ -738,9 +849,20 @@
     renderPeriodChip();
     loadTasks(null);
     loadReports();
-    api("/profile").then(function(data){
-      var p = data.profile;
-      document.getElementById("profileChip").textContent = p ? (p.name + " · " + p.designation) : "";
+    loadProfile();
+  }
+
+  var currentProfile = null;
+
+  function renderProfileChip(){
+    document.getElementById("profileChip").textContent =
+      currentProfile ? (currentProfile.name + " · " + currentProfile.designation) : "";
+  }
+
+  function loadProfile(){
+    return api("/profile").then(function(data){
+      currentProfile = data.profile;
+      renderProfileChip();
     });
   }
 
@@ -856,6 +978,42 @@
   document.getElementById("logoutBtn").addEventListener("click", function(){
     clearSession();
     showLogin();
+  });
+
+  document.getElementById("editProfileBtn").addEventListener("click", function(){
+    document.getElementById("profileEditName").value = currentProfile ? currentProfile.name : "";
+    document.getElementById("profileEditDesignation").value = currentProfile ? currentProfile.designation : "";
+    document.getElementById("profileEditError").hidden = true;
+    document.getElementById("profileEditPanel").hidden = false;
+  });
+
+  document.getElementById("profileCancelBtn").addEventListener("click", function(){
+    document.getElementById("profileEditPanel").hidden = true;
+  });
+
+  document.getElementById("profileEditForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var errorEl = document.getElementById("profileEditError");
+    errorEl.hidden = true;
+    var btn = document.getElementById("profileSaveBtn");
+    btn.disabled = true;
+
+    var name = document.getElementById("profileEditName").value.trim();
+    var designation = document.getElementById("profileEditDesignation").value.trim();
+
+    api("/profile", {
+      method: "POST",
+      body: JSON.stringify({ name: name, designation: designation })
+    }).then(function(){
+      return loadProfile();
+    }).then(function(){
+      document.getElementById("profileEditPanel").hidden = true;
+    }).catch(function(err){
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }).finally(function(){
+      btn.disabled = false;
+    });
   });
 
   document.getElementById("logForm").addEventListener("submit", function(e){

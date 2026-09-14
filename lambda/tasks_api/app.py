@@ -62,6 +62,8 @@ def handler(event, context):
             return list_reports(event)
         if method == "POST" and path == "/reports/generate":
             return generate_report(event)
+        if method == "DELETE" and path.startswith("/reports/"):
+            return delete_report(event)
         if method == "GET" and path == "/profile":
             return get_profile(event)
         if method == "POST" and path == "/profile":
@@ -204,6 +206,18 @@ def list_reports(event):
         )
     reports.sort(key=lambda r: r["key"], reverse=True)
     return _response(200, {"reports": reports})
+
+
+def delete_report(event):
+    user_id = _user_id(event)
+    path_params = event.get("pathParameters") or {}
+    report_key = path_params.get("reportKey")
+    if not report_key:
+        raise ValueError("reportKey is required in the path")
+
+    key = f"{user_id}/{report_key}"
+    s3.delete_object(Bucket=REPORTS_BUCKET, Key=key)
+    return _response(200, {"message": "Report deleted"})
 
 
 def get_profile(event):

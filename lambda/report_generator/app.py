@@ -115,11 +115,8 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         Paragraph(_period_title(start, end), sub_style),
     ]
 
-    date_lines = "<br/>".join(
-        datetime.strptime(t["date"], "%Y-%m-%d").strftime("%-m/%-d/%Y") for t in tasks
-    ) or "&nbsp;"
-    desc_lines = "<br/>".join(t["description"] for t in tasks) or "&nbsp;"
-
+    # One table row per task (rather than two <br/>-joined paragraphs) so a
+    # wrapped description can never drift out of sync with its own date.
     data = [
         [
             Paragraph("NAME", label_style),
@@ -127,29 +124,37 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
             Paragraph("DATE", label_style),
             Paragraph("DESCRIPTION", label_style),
         ],
-        [
-            Paragraph(employee_name, cell_style),
-            Paragraph(employee_position, cell_style),
-            Paragraph(date_lines, cell_style),
-            Paragraph(desc_lines, cell_style),
-        ],
     ]
+    row_count = max(len(tasks), 1)
+    for i in range(row_count):
+        name_cell = Paragraph(employee_name, cell_style) if i == 0 else Paragraph("", cell_style)
+        position_cell = Paragraph(employee_position, cell_style) if i == 0 else Paragraph("", cell_style)
+        if tasks:
+            date_str = datetime.strptime(tasks[i]["date"], "%Y-%m-%d").strftime("%-m/%-d/%Y")
+            desc_str = tasks[i]["description"]
+        else:
+            date_str = "&nbsp;"
+            desc_str = "&nbsp;"
+        data.append([name_cell, position_cell, Paragraph(date_str, cell_style), Paragraph(desc_str, cell_style)])
+
     col_widths = [1.1 * inch, 1.1 * inch, 0.9 * inch, 3.0 * inch]
-    tbl = Table(data, colWidths=col_widths, rowHeights=[0.3 * inch, None])
-    tbl.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.75, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("VALIGN", (0, 1), (-1, 1), "TOP"),
-                ("ALIGN", (0, 1), (1, 1), "CENTER"),
-                ("TOPPADDING", (0, 1), (-1, 1), 10),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ]
-        )
-    )
+    tbl = Table(data, colWidths=col_widths, rowHeights=[0.3 * inch] + [None] * row_count)
+    style_commands = [
+        ("GRID", (0, 0), (-1, -1), 0.75, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 1), (-1, -1), "TOP"),
+        ("ALIGN", (0, 1), (1, -1), "CENTER"),
+        ("TOPPADDING", (0, 1), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]
+    if row_count > 1:
+        style_commands.append(("SPAN", (0, 1), (0, row_count)))
+        style_commands.append(("SPAN", (1, 1), (1, row_count)))
+        style_commands.append(("VALIGN", (0, 1), (1, row_count), "MIDDLE"))
+    tbl.setStyle(TableStyle(style_commands))
     story.append(tbl)
     story.append(Spacer(1, 48))
 

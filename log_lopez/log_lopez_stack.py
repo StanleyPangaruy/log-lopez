@@ -136,6 +136,7 @@ class LogLopezStack(Stack):
         )
         table.grant_read_write_data(tasks_fn)
         reports_bucket.grant_read(tasks_fn)
+        reports_bucket.grant_delete(tasks_fn)
         report_fn.grant_invoke(tasks_fn)
 
         http_api = apigwv2.HttpApi(
@@ -147,6 +148,7 @@ class LogLopezStack(Stack):
                     apigwv2.CorsHttpMethod.GET,
                     apigwv2.CorsHttpMethod.POST,
                     apigwv2.CorsHttpMethod.PUT,
+                    apigwv2.CorsHttpMethod.DELETE,
                     apigwv2.CorsHttpMethod.OPTIONS,
                 ],
                 allow_headers=["Authorization", "Content-Type"],
@@ -182,6 +184,12 @@ class LogLopezStack(Stack):
         http_api.add_routes(
             path="/reports/generate",
             methods=[apigwv2.HttpMethod.POST],
+            integration=tasks_integration,
+            authorizer=authorizer,
+        )
+        http_api.add_routes(
+            path="/reports/{reportKey}",
+            methods=[apigwv2.HttpMethod.DELETE],
             integration=tasks_integration,
             authorizer=authorizer,
         )
