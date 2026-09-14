@@ -79,14 +79,17 @@ class LogLopezStack(Stack):
         )
 
         # ---------------------------------------------------------------
-        # Auth — single-user pool, no self sign-up. Create the one user
-        # manually after deploy (see README).
+        # Auth — self sign-up with email verification. Name and
+        # designation are collected at registration but stored in our
+        # own table (see the PROFILE# items below), not as Cognito
+        # attributes, so the user pool's schema never needs to change.
         # ---------------------------------------------------------------
         user_pool = cognito.UserPool(
             self,
             "UserPool",
             user_pool_name="log-lopez-users",
-            self_sign_up_enabled=False,
+            self_sign_up_enabled=True,
+            auto_verify=cognito.AutoVerifiedAttrs(email=True),
             sign_in_aliases=cognito.SignInAliases(email=True, username=True),
             removal_policy=RemovalPolicy.RETAIN,
         )
@@ -107,7 +110,8 @@ class LogLopezStack(Stack):
             index="app.py",
             handler="handler",
             runtime=_lambda.Runtime.PYTHON_3_12,
-            timeout=Duration.seconds(30),
+            # Scheduled runs loop over every registered user's period, one PDF each.
+            timeout=Duration.seconds(120),
             environment={
                 "TABLE_NAME": table.table_name,
                 "REPORTS_BUCKET": reports_bucket.bucket_name,
@@ -178,6 +182,12 @@ class LogLopezStack(Stack):
         http_api.add_routes(
             path="/reports/generate",
             methods=[apigwv2.HttpMethod.POST],
+            integration=tasks_integration,
+            authorizer=authorizer,
+        )
+        http_api.add_routes(
+            path="/profile",
+            methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
             integration=tasks_integration,
             authorizer=authorizer,
         )

@@ -87,6 +87,11 @@
     font-size:13px;color:var(--danger);background:var(--danger-wash);
     border:1px solid var(--danger);border-radius:3px;padding:9px 11px;
   }
+  .switch-link{margin:0;font-size:13px;color:var(--ink-soft);text-align:center;}
+  .link-btn{
+    background:none;border:none;color:var(--focus);font-size:13px;
+    cursor:pointer;padding:0;text-decoration:underline;font-family:inherit;
+  }
 
   /* ---- Topbar ---- */
   .topbar{
@@ -107,6 +112,7 @@
     padding:7px 12px;border-radius:3px;white-space:nowrap;
   }
   .period-chip b{font-weight:600;}
+  .profile-chip{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
   .logout-btn{
     background:none;border:1px solid var(--line);color:var(--ink-soft);
     font-size:13px;padding:7px 12px;border-radius:3px;cursor:pointer;
@@ -257,6 +263,55 @@
     <p class="error-note" id="loginError" hidden></p>
     <button type="submit" class="stamp-btn" id="loginBtn">Sign in</button>
   </form>
+  <p class="switch-link">New here? <button type="button" class="link-btn" id="showRegisterBtn">Create an account</button></p>
+</div>
+
+<div class="login-wrap" id="registerView" hidden>
+  <div>
+    <h1>Log Lopez</h1>
+    <p class="sub">Register your account</p>
+  </div>
+  <form id="registerForm">
+    <div class="field">
+      <label for="regName">Full name</label>
+      <input type="text" id="regName" autocomplete="name" required>
+    </div>
+    <div class="field">
+      <label for="regDesignation">Designation / Position</label>
+      <input type="text" id="regDesignation" placeholder="e.g. IT Technical Staff" required>
+    </div>
+    <div class="field">
+      <label for="regUsername">Username</label>
+      <input type="text" id="regUsername" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="regEmail">Email</label>
+      <input type="email" id="regEmail" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label for="regPassword">Password</label>
+      <input type="password" id="regPassword" autocomplete="new-password" required>
+    </div>
+    <p class="error-note" id="registerError" hidden></p>
+    <button type="submit" class="stamp-btn" id="registerBtn">Create account</button>
+  </form>
+  <p class="switch-link">Already registered? <button type="button" class="link-btn" id="showLoginBtn">Sign in</button></p>
+</div>
+
+<div class="login-wrap" id="confirmView" hidden>
+  <div>
+    <h1>Log Lopez</h1>
+    <p class="sub">Enter the confirmation code we emailed you</p>
+  </div>
+  <form id="confirmForm">
+    <div class="field">
+      <label for="confirmCode">Confirmation code</label>
+      <input type="text" id="confirmCode" inputmode="numeric" autocomplete="one-time-code" required>
+    </div>
+    <p class="error-note" id="confirmError" hidden></p>
+    <button type="submit" class="stamp-btn" id="confirmBtn">Confirm &amp; sign in</button>
+  </form>
+  <p class="switch-link"><button type="button" class="link-btn" id="resendCodeBtn">Resend code</button></p>
 </div>
 
 <div class="page" id="appView" hidden>
@@ -267,6 +322,7 @@
       <p>Daily accomplishment log · Municipality of Lopez, Quezon</p>
     </div>
     <div class="topbar-right">
+      <span class="profile-chip" id="profileChip"></span>
       <div class="period-chip" id="periodChip">Loading period&hellip;</div>
       <button class="logout-btn" id="logoutBtn">Sign out</button>
     </div>
@@ -647,13 +703,33 @@
 
   // ---------------- View switching ----------------
 
-  function showLogin(){
+  function showLoginView(){
     document.getElementById("loginView").hidden = false;
+    document.getElementById("registerView").hidden = true;
+    document.getElementById("confirmView").hidden = true;
+  }
+
+  function showRegisterView(){
+    document.getElementById("loginView").hidden = true;
+    document.getElementById("registerView").hidden = false;
+    document.getElementById("confirmView").hidden = true;
+  }
+
+  function showConfirmView(){
+    document.getElementById("loginView").hidden = true;
+    document.getElementById("registerView").hidden = true;
+    document.getElementById("confirmView").hidden = false;
+  }
+
+  function showLogin(){
     document.getElementById("appView").hidden = true;
+    showLoginView();
   }
 
   function showApp(){
     document.getElementById("loginView").hidden = true;
+    document.getElementById("registerView").hidden = true;
+    document.getElementById("confirmView").hidden = true;
     document.getElementById("appView").hidden = false;
     period = currentPeriod();
     document.getElementById("entryDate").value = isoDate(period.today);
@@ -662,6 +738,10 @@
     renderPeriodChip();
     loadTasks(null);
     loadReports();
+    api("/profile").then(function(data){
+      var p = data.profile;
+      document.getElementById("profileChip").textContent = p ? (p.name + " · " + p.designation) : "";
+    });
   }
 
   // ---------------- Wiring ----------------
@@ -691,6 +771,85 @@
       errorEl.hidden = false;
     }).finally(function(){
       btn.disabled = false;
+    });
+  });
+
+  var pendingRegistration = null;
+
+  document.getElementById("showRegisterBtn").addEventListener("click", showRegisterView);
+  document.getElementById("showLoginBtn").addEventListener("click", showLoginView);
+
+  document.getElementById("registerForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var errorEl = document.getElementById("registerError");
+    errorEl.hidden = true;
+    var btn = document.getElementById("registerBtn");
+    btn.disabled = true;
+
+    var name = document.getElementById("regName").value.trim();
+    var designation = document.getElementById("regDesignation").value.trim();
+    var username = document.getElementById("regUsername").value.trim();
+    var email = document.getElementById("regEmail").value.trim();
+    var password = document.getElementById("regPassword").value;
+
+    cognitoRequest("SignUp", {
+      ClientId: cfg.userPoolClientId,
+      Username: username,
+      Password: password,
+      UserAttributes: [{ Name: "email", Value: email }]
+    }).then(function(){
+      pendingRegistration = { username: username, password: password, name: name, designation: designation };
+      document.getElementById("confirmCode").value = "";
+      showConfirmView();
+    }).catch(function(err){
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }).finally(function(){
+      btn.disabled = false;
+    });
+  });
+
+  document.getElementById("confirmForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var errorEl = document.getElementById("confirmError");
+    errorEl.hidden = true;
+    var btn = document.getElementById("confirmBtn");
+    btn.disabled = true;
+
+    var code = document.getElementById("confirmCode").value.trim();
+
+    cognitoRequest("ConfirmSignUp", {
+      ClientId: cfg.userPoolClientId,
+      Username: pendingRegistration.username,
+      ConfirmationCode: code
+    }).then(function(){
+      return login(pendingRegistration.username, pendingRegistration.password);
+    }).then(function(){
+      return api("/profile", {
+        method: "POST",
+        body: JSON.stringify({ name: pendingRegistration.name, designation: pendingRegistration.designation })
+      });
+    }).then(function(){
+      pendingRegistration = null;
+      showApp();
+    }).catch(function(err){
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }).finally(function(){
+      btn.disabled = false;
+    });
+  });
+
+  document.getElementById("resendCodeBtn").addEventListener("click", function(){
+    if (!pendingRegistration) return;
+    var errorEl = document.getElementById("confirmError");
+    errorEl.hidden = true;
+    cognitoRequest("ResendConfirmationCode", {
+      ClientId: cfg.userPoolClientId,
+      Username: pendingRegistration.username
+    }).catch(function(err){
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
     });
   });
 

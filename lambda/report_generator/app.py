@@ -3,7 +3,7 @@ import os
 from datetime import date, datetime
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import LETTER
@@ -18,9 +18,7 @@ TABLE_NAME = os.environ["TABLE_NAME"]
 REPORTS_BUCKET = os.environ["REPORTS_BUCKET"]
 table = dynamodb.Table(TABLE_NAME)
 
-# Fixed reporting details (confirmed with the account owner).
-EMPLOYEE_NAME = "STANLEY JOHN O. PANGARUY"
-EMPLOYEE_POSITION = "IT TECHNICAL STAFF"
+# The approving official is fixed for every employee's report.
 MAYOR_NAME = "Hon. ISAIAS B. UBANA II, PhD"
 MAYOR_TITLE = "Municipal Mayor"
 
@@ -52,10 +50,29 @@ def _period_for_trigger(trigger: str):
     return start, end
 
 
-def _fetch_tasks(start: date, end: date):
+def _list_all_user_ids():
+    user_ids = []
+    scan_kwargs = {
+        "FilterExpression": Attr("pk").begins_with("PROFILE#"),
+        "ProjectionExpression": "userId",
+    }
+    while True:
+        resp = table.scan(**scan_kwargs)
+        user_ids.extend(item["userId"] for item in resp.get("Items", []))
+        if "LastEvaluatedKey" not in resp:
+            break
+        scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+    return user_ids
+
+
+def _fetch_profile(user_id: str):
+    return table.get_item(Key={"pk": f"PROFILE#{user_id}", "sk": "PROFILE"}).get("Item")
+
+
+def _fetch_tasks(user_id: str, start: date, end: date):
     resp = table.query(
         KeyConditionExpression=(
-            Key("pk").eq("TASK")
+            Key("pk").eq(f"TASK#{user_id}")
             & Key("sk").between(f"{start.isoformat()}#", f"{end.isoformat()}#￿")
         )
     )
@@ -71,7 +88,7 @@ def _period_title(start: date, end: date) -> str:
     )
 
 
-def _build_pdf(start: date, end: date, tasks, out_path: str) -> None:
+def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_position: str, out_path: str) -> None:
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11, leading=14)
     title_style = ParagraphStyle("title", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=15, spaceAfter=4)
@@ -111,8 +128,8 @@ def _build_pdf(start: date, end: date, tasks, out_path: str) -> None:
             Paragraph("DESCRIPTION", label_style),
         ],
         [
-            Paragraph(EMPLOYEE_NAME, cell_style),
-            Paragraph(EMPLOYEE_POSITION, cell_style),
+            Paragraph(employee_name, cell_style),
+            Paragraph(employee_position, cell_style),
             Paragraph(date_lines, cell_style),
             Paragraph(desc_lines, cell_style),
         ],
@@ -139,8 +156,8 @@ def _build_pdf(start: date, end: date, tasks, out_path: str) -> None:
     sig_data = [
         [Paragraph("Prepared by:", label_style), Paragraph("Noted by:", label_style)],
         [Spacer(1, 28), Spacer(1, 28)],
-        [Paragraph(f"<b>{EMPLOYEE_NAME}</b>", cell_style), Paragraph(f"<b>{MAYOR_NAME}</b>", cell_style)],
-        [Paragraph(EMPLOYEE_POSITION, cell_style), Paragraph(MAYOR_TITLE, cell_style)],
+        [Paragraph(f"<b>{employee_name}</b>", cell_style), Paragraph(f"<b>{MAYOR_NAME}</b>", cell_style)],
+        [Paragraph(employee_position, cell_style), Paragraph(MAYOR_TITLE, cell_style)],
     ]
     sig_tbl = Table(sig_data, colWidths=[3.05 * inch, 3.05 * inch])
     sig_tbl.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
@@ -149,15 +166,31 @@ def _build_pdf(start: date, end: date, tasks, out_path: str) -> None:
     doc.build(story)
 
 
+def _generate_for_user(user_id: str, start: date, end: date):
+    profile = _fetch_profile(user_id)
+    if not profile:
+        print(f"Skipping {user_id}: no profile on file")
+        return None
+
+    tasks = _fetch_tasks(user_id, start, end)
+    out_path = f"/tmp/{user_id}_{start.isoformat()}_to_{end.isoformat()}.pdf"
+    _build_pdf(start, end, tasks, profile["name"], profile["designation"], out_path)
+
+    key = f"{user_id}/{start.isoformat()}_to_{end.isoformat()}.pdf"
+    s3.upload_file(out_path, REPORTS_BUCKET, key, ExtraArgs={"ContentType": "application/pdf"})
+    return key
+
+
 def handler(event, context):
     trigger = event.get("trigger", "day16")
     start, end = _period_for_trigger(trigger)
-    tasks = _fetch_tasks(start, end)
 
-    out_path = f"/tmp/{start.isoformat()}_to_{end.isoformat()}.pdf"
-    _build_pdf(start, end, tasks, out_path)
+    user_id = event.get("userId")
+    user_ids = [user_id] if user_id else _list_all_user_ids()
 
-    key = f"{start.isoformat()}_to_{end.isoformat()}.pdf"
-    s3.upload_file(out_path, REPORTS_BUCKET, key, ExtraArgs={"ContentType": "application/pdf"})
+    generated = [key for uid in user_ids if (key := _generate_for_user(uid, start, end))]
 
-    return {"statusCode": 200, "body": f"Report generated: {key} ({len(tasks)} tasks)"}
+    return {
+        "statusCode": 200,
+        "body": f"Generated {len(generated)} report(s) for {start.isoformat()}–{end.isoformat()}",
+    }

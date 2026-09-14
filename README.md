@@ -1,6 +1,6 @@
 # Log Lopez
 
-Personal accomplishment-log webapp for the Municipality of Lopez, Quezon. Log tasks on weekdays; a PDF Accomplishment Report is generated automatically on the 1st and 16th of each month.
+Accomplishment-log webapp for the Municipality of Lopez, Quezon. Each employee registers their own account, logs tasks on weekdays, and gets a PDF Accomplishment Report generated automatically on the 1st and 16th of each month (or on demand).
 
 ## What's here
 
@@ -12,8 +12,8 @@ log-lopez/
   log_lopez/
     log_lopez_stack.py         The whole stack: DynamoDB, S3, CloudFront, Cognito, API Gateway, EventBridge Scheduler
   lambda/
-    tasks_api/app.py           Create/list tasks, list reports (behind Cognito auth)
-    report_generator/          Builds the Accomplishment Report PDF (needs reportlab, bundled via Docker at deploy time)
+    tasks_api/app.py           Create/edit/list tasks, list/generate reports, get/set profile (behind Cognito auth)
+    report_generator/          Builds each user's Accomplishment Report PDF (needs reportlab, bundled via Docker at deploy time)
   frontend/
     index.html                 The webapp (login + daily log + reports)
     config.js                  Deploy-time config — fill in after first deploy
@@ -61,24 +61,26 @@ LogLopezStack.ReportsBucketName = log-lopez-XXXXXXXXXXXXXX
    ```
    (CDK only re-uploads what changed — this will be quick.)
 
-### Create your Cognito user
+### Creating accounts
 
-The user pool has self sign-up turned off on purpose — you're the only user, so create yourself directly:
+Self sign-up is enabled — anyone visiting `SiteUrl` can click "Create an account" and register with their name, designation, username, email, and password. Cognito emails a confirmation code (from its default sender, capped at 50 emails/day — fine for a small office) to verify the address before first sign-in. Name and designation aren't stored as Cognito attributes; they're saved to DynamoDB as that user's profile and used as the "Prepared by" name/position on their reports.
+
+If you'd rather provision someone directly instead of having them self-register:
 
 ```bash
 aws cognito-idp admin-create-user \
   --user-pool-id <UserPoolId> \
-  --username stanley \
-  --user-attributes Name=email,Value=your@email.com \
+  --username theirname \
+  --user-attributes Name=email,Value=their@email.com \
   --temporary-password 'TempPass123!' \
   --message-action SUPPRESS
 ```
 
-Sign in at the `SiteUrl` with username `stanley` and that temporary password — the app will prompt you to set a real password on first login (the "new password" field appears automatically).
+They'll be prompted to set a real password on first login (the "new password" field appears automatically) — but they'll still need to fill in their profile (name/designation) once signed in, since admin-created users skip the registration form. There's no in-app profile editor yet; re-run `POST /profile` (or add a UI for it) if that's needed.
 
 ## Everyday use
 
-Just visit the `SiteUrl` — it's a bookmark-able page. Log a task, see it land in the ledger and the weekday strip. Reports appear under "Past reports" once generated.
+Just visit the `SiteUrl` — it's a bookmark-able page. Log a task, see it land in the ledger and the weekday strip. Reports appear under "Past reports" once generated, and each user only ever sees their own tasks and reports.
 
 ## Testing the report generator without waiting for the schedule
 
@@ -98,5 +100,6 @@ Check the reports S3 bucket or the app's "Past reports" section afterward.
 ## Notes
 
 - Region defaults to `ap-southeast-1` (Singapore) — closest AWS region to the Philippines. Change it in `app.py` if you'd rather use something else.
-- The report generator's fixed fields (your name, position, and the mayor's name/title) live at the top of `lambda/report_generator/app.py` — update them there and redeploy if anything changes.
+- The mayor's name/title ("Noted by" on every report) is fixed at the top of `lambda/report_generator/app.py` — update it there and redeploy if it changes. Each employee's own name/position comes from their profile, set at registration.
+- The scheduled reports (1st and 16th) generate one PDF per registered user who has a profile on file. The on-demand "Generate PDF" button in the app only generates the signed-in user's own report.
 - No custom domain is set up — the app lives at the CloudFront-generated URL. Let me know if you want one added later.
