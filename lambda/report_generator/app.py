@@ -27,6 +27,9 @@ LOGO_PATH = os.path.join(os.path.dirname(__file__), "lopez.png")
 
 
 def _period_for_trigger(trigger: str):
+    """Period for the two scheduled triggers only — on-demand generation
+    (trigger "period") passes its own explicit start/end instead, since the
+    caller picks which period to target."""
     today = date.today()
     if trigger == "day16":
         start = today.replace(day=1)
@@ -39,15 +42,6 @@ def _period_for_trigger(trigger: str):
         last_day = calendar.monthrange(year, month)[1]
         start = date(year, month, 16)
         end = date(year, month, last_day)
-    elif trigger == "now":
-        # On-demand: the period the caller is currently in (mirrors tasks_api._current_period).
-        if today.day <= 15:
-            start = today.replace(day=1)
-            end = today.replace(day=15)
-        else:
-            last_day = calendar.monthrange(today.year, today.month)[1]
-            start = today.replace(day=16)
-            end = today.replace(day=last_day)
     else:
         raise ValueError(f"Unknown trigger: {trigger!r}")
     return start, end
@@ -267,7 +261,11 @@ def _generate_for_user(user_id: str, start: date, end: date):
 
 def handler(event, context):
     trigger = event.get("trigger", "day16")
-    start, end = _period_for_trigger(trigger)
+    if trigger == "period":
+        start = date.fromisoformat(event["start"])
+        end = date.fromisoformat(event["end"])
+    else:
+        start, end = _period_for_trigger(trigger)
 
     user_id = event.get("userId")
     user_ids = [user_id] if user_id else _list_all_user_ids()

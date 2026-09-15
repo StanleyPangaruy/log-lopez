@@ -215,10 +215,25 @@ def search_tasks(event):
 
 def generate_report(event):
     user_id = _user_id(event)
+    body = json.loads(event.get("body") or "{}")
+    start = (body.get("start") or "").strip()
+    end = (body.get("end") or "").strip()
+
+    if bool(start) != bool(end):
+        raise ValueError("start and end must be provided together")
+    if start and end:
+        for label, value in (("start", start), ("end", end)):
+            try:
+                datetime.strptime(value, "%Y-%m-%d")
+            except ValueError as exc:
+                raise ValueError(f"{label} must be in YYYY-MM-DD format") from exc
+    else:
+        start, end = _current_period()
+
     resp = lambda_client.invoke(
         FunctionName=REPORT_FUNCTION_NAME,
         InvocationType="RequestResponse",
-        Payload=json.dumps({"trigger": "now", "userId": user_id}).encode("utf-8"),
+        Payload=json.dumps({"trigger": "period", "userId": user_id, "start": start, "end": end}).encode("utf-8"),
     )
     if resp.get("FunctionError"):
         print("report generator error:", resp["Payload"].read())

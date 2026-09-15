@@ -246,6 +246,12 @@
   .dl-btn:hover{background:var(--ink);color:var(--paper-raised);}
 
   .reports-head{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-start;justify-content:space-between;}
+  .generate-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+  .period-select{
+    border:1px solid var(--line);border-radius:3px;background:var(--paper);color:var(--ink);
+    font-family:var(--font-body);font-size:13px;padding:8px 10px;cursor:pointer;
+  }
+  .period-select:focus{border-color:var(--focus);}
   .generate-btn{
     background:none;border:1px solid var(--ink);color:var(--ink);
     font-family:var(--font-body);font-size:13px;font-weight:500;
@@ -269,6 +275,8 @@
     .panel{padding:16px;}
     .stamp-btn{align-self:stretch;width:100%;justify-content:center;}
     .generate-btn{width:100%;justify-content:center;text-align:center;}
+    .generate-controls{flex-direction:column;align-items:stretch;width:100%;}
+    .period-select{width:100%;}
     .profile-edit-actions{flex-direction:column;align-items:stretch;}
     .day-cell{width:26px;height:34px;font-size:11px;}
     table.ledger{min-width:0;}
@@ -472,7 +480,10 @@
         <h2>Past reports</h2>
         <p class="sub">Generated automatically on the 1st and 16th of each month.</p>
       </div>
-      <button type="button" class="generate-btn" id="generateReportBtn">Generate PDF for this period</button>
+      <div class="generate-controls">
+        <select id="reportPeriodSelect" class="period-select"></select>
+        <button type="button" class="generate-btn" id="generateReportBtn">Generate PDF</button>
+      </div>
     </div>
     <p class="error-note" id="generateError" hidden></p>
     <p class="error-note" id="reportsError" hidden></p>
@@ -636,8 +647,45 @@
       "This period, " + monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate();
     document.getElementById("ledgerTitle").textContent =
       monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate() + " ledger";
-    document.getElementById("generateReportBtn").textContent =
-      "Generate PDF · " + monthShort(period.start) + " " + period.start.getDate() + "–" + period.end.getDate();
+  }
+
+  function recentPeriods(count){
+    var today = new Date();
+    var isFirstHalf = today.getDate() <= 15;
+    var y = today.getFullYear(), m = today.getMonth();
+    var periods = [];
+    for (var i = 0; i < count; i++){
+      var start, end;
+      if (isFirstHalf){
+        start = new Date(y, m, 1);
+        end = new Date(y, m, 15);
+      } else {
+        start = new Date(y, m, 16);
+        end = new Date(y, m + 1, 0);
+      }
+      periods.push({
+        start: isoDate(start),
+        end: isoDate(end),
+        label: monthShort(start) + " " + start.getDate() + "–" + end.getDate() + ", " + end.getFullYear()
+      });
+      if (isFirstHalf){
+        m -= 1;
+        if (m < 0){ m = 11; y -= 1; }
+      }
+      isFirstHalf = !isFirstHalf;
+    }
+    return periods;
+  }
+
+  function populatePeriodSelect(){
+    var sel = document.getElementById("reportPeriodSelect");
+    sel.innerHTML = "";
+    recentPeriods(12).forEach(function(p, i){
+      var opt = document.createElement("option");
+      opt.value = p.start + "," + p.end;
+      opt.textContent = p.label + (i === 0 ? " (current)" : "");
+      sel.appendChild(opt);
+    });
   }
 
   function renderStrip(tasksByDate){
@@ -930,6 +978,7 @@
     document.getElementById("entryDate").min = isoDate(period.start);
     document.getElementById("entryDate").max = isoDate(period.end);
     renderPeriodChip();
+    populatePeriodSelect();
     loadTasks(null);
     loadReports();
     loadProfile();
@@ -1177,7 +1226,10 @@
     btn.disabled = true;
     btn.textContent = "Generating…";
 
-    api("/reports/generate", { method: "POST", body: JSON.stringify({}) })
+    var parts = document.getElementById("reportPeriodSelect").value.split(",");
+    var start = parts[0], end = parts[1];
+
+    api("/reports/generate", { method: "POST", body: JSON.stringify({ start: start, end: end }) })
       .then(function(){
         return loadReports();
       })
