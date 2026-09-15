@@ -5,11 +5,11 @@ from datetime import date, datetime
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
@@ -160,7 +160,7 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     )
 
     styles = getSampleStyleSheet()
-    header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_LEFT, fontSize=11, leading=14)
+    header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11, leading=14)
     title_style = ParagraphStyle("title", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=15, spaceAfter=4)
     sub_style = ParagraphStyle(
         "sub", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10.5, spaceAfter=_SUB_SPACE_AFTER
@@ -177,33 +177,14 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         rightMargin=right_margin,
     )
 
-    masthead_text = [
+    # The masthead text is centered on the page like the title below it; the
+    # seal is drawn separately (see _draw_letterhead) at a fixed position to
+    # its left, rather than being part of the centered flow.
+    story = [
         Paragraph("Republic of the Philippines", header_style),
         Paragraph("Province of Quezon", header_style),
         Paragraph("Municipality of Lopez", header_style),
         Paragraph("*****", header_style),
-    ]
-    masthead = Table(
-        [[Image(LOGO_PATH, width=0.8 * inch, height=0.8 * inch), masthead_text]],
-        colWidths=[1.0 * inch, 3.9 * inch],
-        hAlign="CENTER",
-    )
-    masthead.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (0, 0), "CENTER"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ("LEFTPADDING", (1, 0), (1, 0), 16),
-            ]
-        )
-    )
-
-    story = [
-        masthead,
         Spacer(1, _MASTHEAD_GAP),
         Paragraph("ACCOMPLISHMENT REPORT", title_style),
         Paragraph(_period_title(start, end), sub_style),
@@ -270,7 +251,13 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     # KeepTogether so the signature block never splits across a page boundary.
     story.append(KeepTogether([sig_tbl]))
 
-    doc.build(story)
+    def _draw_letterhead(canvas, doc_):
+        logo_size = 0.8 * inch
+        x = doc_.leftMargin + 0.1 * inch
+        y = LETTER[1] - doc_.topMargin - logo_size + 0.08 * inch
+        canvas.drawImage(LOGO_PATH, x, y, width=logo_size, height=logo_size, preserveAspectRatio=True, mask="auto")
+
+    doc.build(story, onFirstPage=_draw_letterhead)
 
 
 def _generate_for_user(user_id: str, start: date, end: date):
