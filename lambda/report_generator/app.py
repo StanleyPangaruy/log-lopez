@@ -92,45 +92,24 @@ def _period_title(start: date, end: date) -> str:
 
 
 
-# Candidate (font size, leading, row padding) styles for task rows, largest
-# first. We measure each candidate's actual wrapped height against the space
-# left on the page and use the largest one that still fits on one page.
-_ROW_STYLE_CANDIDATES = [
-    (10, 13, 6),
-    (9.5, 12, 5),
-    (9, 11, 4.5),
-    (8.5, 10.5, 4),
-    (8, 10, 3),
-    (7.5, 9.5, 2.5),
-    (7, 9, 2),
-    (6.5, 8.5, 1.5),
-    (6, 8, 1),
-]
+# Fixed task-row style — always 10pt, never shrunk to force a fit.
+_ROW_FONT = 10
+_ROW_LEADING = 13
+_ROW_PAD = 6
 
 _MASTHEAD_GAP = 10
 _TABLE_GAP = 16
 _SUB_SPACE_AFTER = 10
 
 
-def _rows_height(tasks, row_count, desc_col_width, cell_font, cell_leading, row_pad) -> float:
-    measure_style = ParagraphStyle("measure", fontSize=cell_font, leading=cell_leading)
+def _rows_height(tasks, row_count, desc_col_width) -> float:
+    measure_style = ParagraphStyle("measure", fontSize=_ROW_FONT, leading=_ROW_LEADING)
     total = 0.0
     for i in range(row_count):
         desc = tasks[i]["description"] if tasks else "&nbsp;"
         _, h = Paragraph(desc, measure_style).wrap(desc_col_width, 10000)
-        total += max(h, cell_leading) + 2 * row_pad
+        total += max(h, _ROW_LEADING) + 2 * _ROW_PAD
     return total
-
-
-def _pick_row_style(tasks, row_count, desc_col_width, available_height):
-    """The largest candidate row style whose measured (wrapped) height fits
-    the remaining page space, plus whether a fit was actually found. When
-    nothing fits (an extreme number of tasks), the caller should stop
-    trying to force one page and let the table split safely instead."""
-    for candidate in _ROW_STYLE_CANDIDATES:
-        if _rows_height(tasks, row_count, desc_col_width, *candidate) <= available_height:
-            return (*candidate, True)
-    return (*_ROW_STYLE_CANDIDATES[-1], False)
 
 
 def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_position: str, out_path: str) -> None:
@@ -145,7 +124,8 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     desc_col_width = col_widths[3] - 16  # minus 8pt left/right cell padding
 
     # Fixed-size elements above and below the task table (measured generously
-    # with headroom) — only the table's row style flexes to make room.
+    # with headroom), used only to decide whether the NAME/POSITION column
+    # can safely be merged into one spanned cell (see the SPAN note below).
     fixed_overhead = (
         0.8 * inch  # masthead logo/text block
         + _MASTHEAD_GAP
@@ -156,9 +136,7 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         + 70  # signature block (labels + gap + name/position lines)
     )
     available_for_rows = (LETTER[1] - top_margin - bottom_margin) - fixed_overhead
-    cell_font, cell_leading, row_pad, fits_one_page = _pick_row_style(
-        tasks, row_count, desc_col_width, available_for_rows
-    )
+    fits_one_page = _rows_height(tasks, row_count, desc_col_width) <= available_for_rows
 
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11, leading=14)
@@ -166,7 +144,7 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     sub_style = ParagraphStyle(
         "sub", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10.5, spaceAfter=_SUB_SPACE_AFTER
     )
-    cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=cell_font, leading=cell_leading)
+    cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=_ROW_FONT, leading=_ROW_LEADING)
     label_style = ParagraphStyle("label", parent=styles["Normal"], fontSize=9, leading=12, fontName="Helvetica-Bold")
 
     doc = SimpleDocTemplate(
@@ -228,8 +206,8 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
         ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ("ALIGN", (0, 1), (1, -1), "CENTER"),
-        ("TOPPADDING", (0, 1), (-1, -1), row_pad),
-        ("BOTTOMPADDING", (0, 1), (-1, -1), row_pad),
+        ("TOPPADDING", (0, 1), (-1, -1), _ROW_PAD),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), _ROW_PAD),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
     ]
