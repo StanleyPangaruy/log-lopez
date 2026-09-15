@@ -213,6 +213,14 @@
   .ledger-note{margin:16px 0 0;color:var(--ink-soft);font-size:13px;}
   .empty-note{margin:0;color:var(--ink-soft);font-size:13.5px;}
 
+  /* ---- Search ---- */
+  .search-panel .sub{margin-bottom:18px;}
+  .search-fields{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:10px;}
+  .search-fields .field{margin:0;min-width:140px;}
+  .search-field-keyword{flex:1 1 220px;}
+  .search-fields .stamp-btn{align-self:auto;margin-bottom:1px;}
+  .search-panel .ledger-scroll{margin-top:8px;}
+
   /* ---- Reports ---- */
   .reports h2{margin:0 0 4px;font-family:var(--font-display);font-size:19px;font-weight:600;}
   .reports .sub{margin:0 0 18px;color:var(--ink-soft);font-size:13px;}
@@ -426,6 +434,37 @@
       <p class="ledger-note" id="ledgerNote"></p>
     </section>
   </div>
+
+  <section class="panel search-panel">
+    <h2>Search past entries</h2>
+    <p class="sub">Find anything you've logged before, by keyword and/or date range — not limited to this period. Past entries can't be edited here.</p>
+    <form id="searchForm">
+      <div class="search-fields">
+        <div class="field search-field-keyword">
+          <label for="searchKeyword">Keyword</label>
+          <input type="text" id="searchKeyword" placeholder="e.g. printer">
+        </div>
+        <div class="field">
+          <label for="searchStart">From</label>
+          <input type="date" id="searchStart">
+        </div>
+        <div class="field">
+          <label for="searchEnd">To</label>
+          <input type="date" id="searchEnd">
+        </div>
+        <button type="submit" class="stamp-btn" id="searchBtn">Search</button>
+      </div>
+      <p class="error-note" id="searchError" hidden></p>
+    </form>
+    <div class="ledger-scroll">
+      <table class="ledger" id="searchResultsTable" hidden>
+        <thead><tr><th>Date</th><th>Description</th></tr></thead>
+        <tbody id="searchResultsBody"></tbody>
+      </table>
+    </div>
+    <p class="empty-note" id="searchEmpty" hidden>No matching entries found.</p>
+    <p class="empty-note" id="searchHint">Enter a keyword and/or a date range, then search.</p>
+  </section>
 
   <section class="reports">
     <div class="reports-head">
@@ -828,6 +867,34 @@
     });
   }
 
+  function renderSearchResults(tasks){
+    var table = document.getElementById("searchResultsTable");
+    var body = document.getElementById("searchResultsBody");
+    var emptyEl = document.getElementById("searchEmpty");
+    var hintEl = document.getElementById("searchHint");
+    hintEl.hidden = true;
+    body.innerHTML = "";
+
+    if (tasks.length === 0){
+      table.hidden = true;
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    table.hidden = false;
+    tasks.forEach(function(t){
+      var tr = document.createElement("tr");
+      var tdDate = document.createElement("td");
+      tdDate.className = "date";
+      var d = new Date(t.date + "T00:00:00");
+      tdDate.textContent = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      var tdDesc = document.createElement("td");
+      tdDesc.textContent = t.description;
+      tr.appendChild(tdDate); tr.appendChild(tdDesc);
+      body.appendChild(tr);
+    });
+  }
+
   // ---------------- View switching ----------------
 
   function showLoginView(){
@@ -1059,6 +1126,47 @@
     }).finally(function(){
       btn.disabled = false;
     });
+  });
+
+  document.getElementById("searchForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var errorEl = document.getElementById("searchError");
+    errorEl.hidden = true;
+
+    var keyword = document.getElementById("searchKeyword").value.trim();
+    var start = document.getElementById("searchStart").value;
+    var end = document.getElementById("searchEnd").value;
+
+    if (!keyword && !start && !end){
+      errorEl.textContent = "Enter a keyword and/or a date range.";
+      errorEl.hidden = false;
+      return;
+    }
+    if ((start && !end) || (!start && end)){
+      errorEl.textContent = "Pick both a start and end date, or leave both blank.";
+      errorEl.hidden = false;
+      return;
+    }
+
+    var btn = document.getElementById("searchBtn");
+    btn.disabled = true;
+
+    var qs = [];
+    if (keyword) qs.push("q=" + encodeURIComponent(keyword));
+    if (start) qs.push("start=" + encodeURIComponent(start));
+    if (end) qs.push("end=" + encodeURIComponent(end));
+
+    api("/tasks/search?" + qs.join("&"))
+      .then(function(data){
+        renderSearchResults(data.tasks || []);
+      })
+      .catch(function(err){
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      })
+      .finally(function(){
+        btn.disabled = false;
+      });
   });
 
   document.getElementById("generateReportBtn").addEventListener("click", function(){

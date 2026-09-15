@@ -56,6 +56,8 @@ def handler(event, context):
             return create_task(event)
         if method == "GET" and path == "/tasks":
             return list_tasks(event)
+        if method == "GET" and path == "/tasks/search":
+            return search_tasks(event)
         if method == "PUT" and path.startswith("/tasks/"):
             return update_task(event)
         if method == "GET" and path == "/reports":
@@ -167,6 +169,48 @@ def list_tasks(event):
     )
     items = sorted(resp.get("Items", []), key=lambda i: i["sk"])
     return _response(200, {"start": start, "end": end, "tasks": items})
+
+
+def search_tasks(event):
+    user_id = _user_id(event)
+    params = event.get("queryStringParameters") or {}
+    keyword = (params.get("q") or "").strip()
+    start = (params.get("start") or "").strip()
+    end = (params.get("end") or "").strip()
+
+    if not keyword and not start and not end:
+        raise ValueError("Provide a keyword and/or a date range to search")
+    if bool(start) != bool(end):
+        raise ValueError("start and end must be provided together")
+    for label, value in (("start", start), ("end", end)):
+        if not value:
+            continue
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"{label} must be in YYYY-MM-DD format") from exc
+
+    pk = f"TASK#{user_id}"
+    if start and end:
+        key_condition = Key("pk").eq(pk) & Key("sk").between(f"{start}#", f"{end}#￿")
+    else:
+        key_condition = Key("pk").eq(pk)
+
+    items = []
+    query_kwargs = {"KeyConditionExpression": key_condition}
+    while True:
+        resp = table.query(**query_kwargs)
+        items.extend(resp.get("Items", []))
+        if "LastEvaluatedKey" not in resp:
+            break
+        query_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+
+    if keyword:
+        needle = keyword.lower()
+        items = [i for i in items if needle in i.get("description", "").lower()]
+
+    items.sort(key=lambda i: i["sk"], reverse=True)
+    return _response(200, {"query": keyword, "start": start, "end": end, "tasks": items})
 
 
 def generate_report(event):

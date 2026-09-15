@@ -176,6 +176,12 @@ class LogLopezStack(Stack):
             authorizer=authorizer,
         )
         http_api.add_routes(
+            path="/tasks/search",
+            methods=[apigwv2.HttpMethod.GET],
+            integration=tasks_integration,
+            authorizer=authorizer,
+        )
+        http_api.add_routes(
             path="/reports",
             methods=[apigwv2.HttpMethod.GET],
             integration=tasks_integration,
