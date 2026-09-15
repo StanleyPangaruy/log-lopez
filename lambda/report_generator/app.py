@@ -5,11 +5,11 @@ from datetime import date, datetime
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
@@ -21,6 +21,8 @@ table = dynamodb.Table(TABLE_NAME)
 # The approving official is fixed for every employee's report.
 MAYOR_NAME = "Hon. ISAIAS B. UBANA II, PhD"
 MAYOR_TITLE = "Municipal Mayor"
+
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "lopez.png")
 
 
 def _period_for_trigger(trigger: str):
@@ -90,7 +92,7 @@ def _period_title(start: date, end: date) -> str:
 
 def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_position: str, out_path: str) -> None:
     styles = getSampleStyleSheet()
-    header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11, leading=14)
+    header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_LEFT, fontSize=11, leading=14)
     title_style = ParagraphStyle("title", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=15, spaceAfter=4)
     sub_style = ParagraphStyle("sub", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10.5, spaceAfter=18)
     cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=10, leading=13)
@@ -105,11 +107,32 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         rightMargin=0.85 * inch,
     )
 
-    story = [
+    masthead_text = [
         Paragraph("Republic of the Philippines", header_style),
         Paragraph("Province of Quezon", header_style),
         Paragraph("Municipality of Lopez", header_style),
         Paragraph("*****", header_style),
+    ]
+    masthead = Table(
+        [[Image(LOGO_PATH, width=0.8 * inch, height=0.8 * inch), masthead_text]],
+        colWidths=[1.0 * inch, 4.9 * inch],
+    )
+    masthead.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LEFTPADDING", (1, 0), (1, 0), 16),
+            ]
+        )
+    )
+
+    story = [
+        masthead,
         Spacer(1, 14),
         Paragraph("ACCOMPLISHMENT REPORT", title_style),
         Paragraph(_period_title(start, end), sub_style),

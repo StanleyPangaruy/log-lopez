@@ -88,6 +88,8 @@
     font-size:13px;color:var(--danger);background:var(--danger-wash);
     border:1px solid var(--danger);border-radius:3px;padding:9px 11px;
   }
+  .brand-row{display:flex;align-items:center;gap:16px;}
+  .brand-logo{width:44px;height:44px;flex:none;display:block;}
   .switch-link{margin:0;font-size:13px;color:var(--ink-soft);text-align:center;}
   .link-btn{
     background:none;border:none;color:var(--focus);font-size:13px;
@@ -253,6 +255,8 @@
     .login-wrap{margin-top:8vh;}
     .topbar{padding-bottom:12px;gap:10px 16px;}
     .brand-text h1{font-size:19px;}
+    .brand-logo{width:34px;height:34px;}
+    .brand-row{gap:12px;}
     .brand-text p{font-size:12px;}
     .panel{padding:16px;}
     .stamp-btn{align-self:stretch;width:100%;justify-content:center;}
@@ -269,7 +273,10 @@
 
 <div class="login-wrap" id="loginView">
   <div>
-    <h1>Log Lopez</h1>
+    <div class="brand-row">
+      <img src="lopez.png" alt="Seal of the Municipality of Lopez, Quezon" class="brand-logo">
+      <h1>Log Lopez</h1>
+    </div>
     <p class="sub">Daily accomplishment log · Municipality of Lopez, Quezon</p>
   </div>
   <form id="loginForm">
@@ -293,7 +300,10 @@
 
 <div class="login-wrap" id="registerView" hidden>
   <div>
-    <h1>Log Lopez</h1>
+    <div class="brand-row">
+      <img src="lopez.png" alt="Seal of the Municipality of Lopez, Quezon" class="brand-logo">
+      <h1>Log Lopez</h1>
+    </div>
     <p class="sub">Register your account</p>
   </div>
   <form id="registerForm">
@@ -325,7 +335,10 @@
 
 <div class="login-wrap" id="confirmView" hidden>
   <div>
-    <h1>Log Lopez</h1>
+    <div class="brand-row">
+      <img src="lopez.png" alt="Seal of the Municipality of Lopez, Quezon" class="brand-logo">
+      <h1>Log Lopez</h1>
+    </div>
     <p class="sub">Enter the confirmation code we emailed you</p>
   </div>
   <form id="confirmForm">
@@ -343,7 +356,10 @@
 
   <div class="topbar">
     <div class="brand-text">
-      <h1>Log Lopez</h1>
+      <div class="brand-row">
+        <img src="lopez.png" alt="Seal of the Municipality of Lopez, Quezon" class="brand-logo">
+        <h1>Log Lopez</h1>
+      </div>
       <p>Daily accomplishment log · Municipality of Lopez, Quezon</p>
     </div>
     <div class="topbar-right">
