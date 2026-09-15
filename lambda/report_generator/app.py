@@ -9,7 +9,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
@@ -90,21 +90,91 @@ def _period_title(start: date, end: date) -> str:
     )
 
 
+
+# Candidate (font size, leading, row padding) styles for task rows, largest
+# first. We measure each candidate's actual wrapped height against the space
+# left on the page and use the largest one that still fits on one page.
+_ROW_STYLE_CANDIDATES = [
+    (10, 13, 6),
+    (9.5, 12, 5),
+    (9, 11, 4.5),
+    (8.5, 10.5, 4),
+    (8, 10, 3),
+    (7.5, 9.5, 2.5),
+    (7, 9, 2),
+    (6.5, 8.5, 1.5),
+    (6, 8, 1),
+]
+
+_MASTHEAD_GAP = 10
+_TABLE_GAP = 16
+_SUB_SPACE_AFTER = 10
+
+
+def _rows_height(tasks, row_count, desc_col_width, cell_font, cell_leading, row_pad) -> float:
+    measure_style = ParagraphStyle("measure", fontSize=cell_font, leading=cell_leading)
+    total = 0.0
+    for i in range(row_count):
+        desc = tasks[i]["description"] if tasks else "&nbsp;"
+        _, h = Paragraph(desc, measure_style).wrap(desc_col_width, 10000)
+        total += max(h, cell_leading) + 2 * row_pad
+    return total
+
+
+def _pick_row_style(tasks, row_count, desc_col_width, available_height):
+    """The largest candidate row style whose measured (wrapped) height fits
+    the remaining page space, plus whether a fit was actually found. When
+    nothing fits (an extreme number of tasks), the caller should stop
+    trying to force one page and let the table split safely instead."""
+    for candidate in _ROW_STYLE_CANDIDATES:
+        if _rows_height(tasks, row_count, desc_col_width, *candidate) <= available_height:
+            return (*candidate, True)
+    return (*_ROW_STYLE_CANDIDATES[-1], False)
+
+
 def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_position: str, out_path: str) -> None:
+    row_count = max(len(tasks), 1)
+
+    top_margin = 0.65 * inch
+    bottom_margin = 0.65 * inch
+    left_margin = 0.85 * inch
+    right_margin = 0.85 * inch
+
+    col_widths = [1.1 * inch, 1.1 * inch, 0.9 * inch, 3.0 * inch]
+    desc_col_width = col_widths[3] - 16  # minus 8pt left/right cell padding
+
+    # Fixed-size elements above and below the task table (measured generously
+    # with headroom) — only the table's row style flexes to make room.
+    fixed_overhead = (
+        0.8 * inch  # masthead logo/text block
+        + _MASTHEAD_GAP
+        + 26  # "ACCOMPLISHMENT REPORT" title
+        + 24  # period subtitle
+        + 0.3 * inch  # table header row
+        + _TABLE_GAP
+        + 70  # signature block (labels + gap + name/position lines)
+    )
+    available_for_rows = (LETTER[1] - top_margin - bottom_margin) - fixed_overhead
+    cell_font, cell_leading, row_pad, fits_one_page = _pick_row_style(
+        tasks, row_count, desc_col_width, available_for_rows
+    )
+
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle("header", parent=styles["Normal"], alignment=TA_LEFT, fontSize=11, leading=14)
     title_style = ParagraphStyle("title", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=15, spaceAfter=4)
-    sub_style = ParagraphStyle("sub", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10.5, spaceAfter=18)
-    cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=10, leading=13)
+    sub_style = ParagraphStyle(
+        "sub", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10.5, spaceAfter=_SUB_SPACE_AFTER
+    )
+    cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=cell_font, leading=cell_leading)
     label_style = ParagraphStyle("label", parent=styles["Normal"], fontSize=9, leading=12, fontName="Helvetica-Bold")
 
     doc = SimpleDocTemplate(
         out_path,
         pagesize=LETTER,
-        topMargin=0.75 * inch,
-        bottomMargin=0.75 * inch,
-        leftMargin=0.85 * inch,
-        rightMargin=0.85 * inch,
+        topMargin=top_margin,
+        bottomMargin=bottom_margin,
+        leftMargin=left_margin,
+        rightMargin=right_margin,
     )
 
     masthead_text = [
@@ -115,13 +185,14 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     ]
     masthead = Table(
         [[Image(LOGO_PATH, width=0.8 * inch, height=0.8 * inch), masthead_text]],
-        colWidths=[1.0 * inch, 4.9 * inch],
+        colWidths=[1.0 * inch, 3.9 * inch],
+        hAlign="CENTER",
     )
     masthead.setStyle(
         TableStyle(
             [
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (0, 0), (0, 0), "CENTER"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                 ("TOPPADDING", (0, 0), (-1, -1), 0),
@@ -133,7 +204,7 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
 
     story = [
         masthead,
-        Spacer(1, 14),
+        Spacer(1, _MASTHEAD_GAP),
         Paragraph("ACCOMPLISHMENT REPORT", title_style),
         Paragraph(_period_title(start, end), sub_style),
     ]
@@ -148,10 +219,18 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
             Paragraph("DESCRIPTION", label_style),
         ],
     ]
-    row_count = max(len(tasks), 1)
+    # Merging NAME/POSITION into one spanned cell only holds up when we're
+    # sure the table fits on one page — a spanned cell that has to split
+    # across a page boundary can crash reportlab's layout engine. If it
+    # doesn't fit, repeat the name/position on every row instead so the
+    # table can still split safely rather than erroring out.
     for i in range(row_count):
-        name_cell = Paragraph(employee_name, cell_style) if i == 0 else Paragraph("", cell_style)
-        position_cell = Paragraph(employee_position, cell_style) if i == 0 else Paragraph("", cell_style)
+        if fits_one_page:
+            name_cell = Paragraph(employee_name, cell_style) if i == 0 else Paragraph("", cell_style)
+            position_cell = Paragraph(employee_position, cell_style) if i == 0 else Paragraph("", cell_style)
+        else:
+            name_cell = Paragraph(employee_name, cell_style)
+            position_cell = Paragraph(employee_position, cell_style)
         if tasks:
             date_str = datetime.strptime(tasks[i]["date"], "%Y-%m-%d").strftime("%-m/%-d/%Y")
             desc_str = tasks[i]["description"]
@@ -160,7 +239,6 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
             desc_str = "&nbsp;"
         data.append([name_cell, position_cell, Paragraph(date_str, cell_style), Paragraph(desc_str, cell_style)])
 
-    col_widths = [1.1 * inch, 1.1 * inch, 0.9 * inch, 3.0 * inch]
     tbl = Table(data, colWidths=col_widths, rowHeights=[0.3 * inch] + [None] * row_count)
     style_commands = [
         ("GRID", (0, 0), (-1, -1), 0.75, colors.black),
@@ -168,18 +246,18 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
         ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ("ALIGN", (0, 1), (1, -1), "CENTER"),
-        ("TOPPADDING", (0, 1), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
+        ("TOPPADDING", (0, 1), (-1, -1), row_pad),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), row_pad),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
     ]
-    if row_count > 1:
+    if row_count > 1 and fits_one_page:
         style_commands.append(("SPAN", (0, 1), (0, row_count)))
         style_commands.append(("SPAN", (1, 1), (1, row_count)))
         style_commands.append(("VALIGN", (0, 1), (1, row_count), "MIDDLE"))
     tbl.setStyle(TableStyle(style_commands))
     story.append(tbl)
-    story.append(Spacer(1, 48))
+    story.append(Spacer(1, _TABLE_GAP))
 
     sig_data = [
         [Paragraph("Prepared by:", label_style), Paragraph("Noted by:", label_style)],
@@ -189,7 +267,8 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     ]
     sig_tbl = Table(sig_data, colWidths=[3.05 * inch, 3.05 * inch])
     sig_tbl.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(sig_tbl)
+    # KeepTogether so the signature block never splits across a page boundary.
+    story.append(KeepTogether([sig_tbl]))
 
     doc.build(story)
 
