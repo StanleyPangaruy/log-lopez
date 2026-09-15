@@ -95,7 +95,8 @@ def _period_title(start: date, end: date) -> str:
 # Fixed task-row style — always 10pt, never shrunk to force a fit.
 _ROW_FONT = 10
 _ROW_LEADING = 13
-_ROW_PAD = 6
+_ROW_PAD = 3
+_CELL_LR_PAD = 5
 
 _MASTHEAD_GAP = 10
 _TABLE_GAP = 16
@@ -121,7 +122,7 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     right_margin = 0.85 * inch
 
     col_widths = [1.1 * inch, 1.1 * inch, 0.9 * inch, 3.0 * inch]
-    desc_col_width = col_widths[3] - 16  # minus 8pt left/right cell padding
+    desc_col_width = col_widths[3] - 2 * _CELL_LR_PAD
 
     # Fixed-size elements above and below the task table (measured generously
     # with headroom), used only to decide whether the NAME/POSITION column
@@ -131,7 +132,7 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
         + _MASTHEAD_GAP
         + 26  # "ACCOMPLISHMENT REPORT" title
         + 24  # period subtitle
-        + 0.3 * inch  # table header row
+        + 0.22 * inch  # table header row
         + _TABLE_GAP
         + 70  # signature block (labels + gap + name/position lines)
     )
@@ -199,17 +200,20 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
             desc_str = "&nbsp;"
         data.append([name_cell, position_cell, Paragraph(date_str, cell_style), Paragraph(desc_str, cell_style)])
 
-    tbl = Table(data, colWidths=col_widths, rowHeights=[0.3 * inch] + [None] * row_count)
+    tbl = Table(data, colWidths=col_widths, rowHeights=[0.22 * inch] + [None] * row_count)
     style_commands = [
         ("GRID", (0, 0), (-1, -1), 0.75, colors.black),
         ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ("ALIGN", (0, 1), (1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, 0), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 3),
         ("TOPPADDING", (0, 1), (-1, -1), _ROW_PAD),
         ("BOTTOMPADDING", (0, 1), (-1, -1), _ROW_PAD),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), _CELL_LR_PAD),
+        ("RIGHTPADDING", (0, 0), (-1, -1), _CELL_LR_PAD),
     ]
     if row_count > 1 and fits_one_page:
         style_commands.append(("SPAN", (0, 1), (0, row_count)))
