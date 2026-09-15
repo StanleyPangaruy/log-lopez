@@ -9,6 +9,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 dynamodb = boto3.resource("dynamodb")
@@ -251,9 +252,16 @@ def _build_pdf(start: date, end: date, tasks, employee_name: str, employee_posit
     # KeepTogether so the signature block never splits across a page boundary.
     story.append(KeepTogether([sig_tbl]))
 
+    # Widest masthead line, to find where the centered text actually starts
+    # so the seal can sit a fixed, modest gap to its left (not just guessed).
+    masthead_lines = ["Republic of the Philippines", "Province of Quezon", "Municipality of Lopez", "*****"]
+    widest_line = max(stringWidth(line, "Helvetica", 11) for line in masthead_lines)
+    text_left_x = (LETTER[0] - widest_line) / 2
+
     def _draw_letterhead(canvas, doc_):
         logo_size = 0.8 * inch
-        x = doc_.leftMargin + 0.1 * inch
+        gap = 18
+        x = text_left_x - gap - logo_size
         y = LETTER[1] - doc_.topMargin - logo_size + 0.08 * inch
         canvas.drawImage(LOGO_PATH, x, y, width=logo_size, height=logo_size, preserveAspectRatio=True, mask="auto")
 
